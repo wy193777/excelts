@@ -1,12 +1,15 @@
 import events from "events";
-import { Zip, ZipPassThrough } from "fflate";
+import { Zip, ZipPassThrough, ZipDeflate } from "fflate";
 import { StreamBuf } from "./stream-buf.js";
 import { stringToBuffer } from "./browser-buffer-encode.js";
 import { isBrowser } from "./browser.js";
 
 interface ZipWriterOptions {
   type?: string;
-  compression?: string;
+  compression?: "DEFLATE" | "STORE";
+  compressionOptions?: {
+    level?: number; // 0-9, where 0 is no compression, 9 is best compression
+  };
 }
 
 interface AppendOptions {
@@ -28,6 +31,7 @@ class ZipWriter extends events.EventEmitter {
   stream: any;
   zip: Zip;
   finalized: boolean;
+  compressionLevel: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
   constructor(options?: ZipWriterOptions) {
     super();
@@ -38,6 +42,20 @@ class ZipWriter extends events.EventEmitter {
       },
       options
     );
+    // Default compression level is 6 (good balance of speed and size)
+    // 0 = no compression, 9 = best compression
+    const level = this.options.compressionOptions?.level ?? 6;
+    this.compressionLevel = Math.max(0, Math.min(9, level)) as
+      | 0
+      | 1
+      | 2
+      | 3
+      | 4
+      | 5
+      | 6
+      | 7
+      | 8
+      | 9;
 
     this.files = {};
     this.stream = new StreamBuf();
@@ -91,7 +109,11 @@ class ZipWriter extends events.EventEmitter {
     }
 
     // Add file to zip using streaming API
-    const zipFile = new ZipPassThrough(options.name);
+    // Use ZipDeflate for compression or ZipPassThrough for no compression
+    const useCompression = this.options.compression !== "STORE";
+    const zipFile = useCompression
+      ? new ZipDeflate(options.name, { level: this.compressionLevel })
+      : new ZipPassThrough(options.name);
     this.zip.add(zipFile);
     zipFile.push(buffer, true); // true = final chunk
   }

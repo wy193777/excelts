@@ -1,5 +1,5 @@
 import fs from "fs";
-import { Zip, ZipPassThrough } from "fflate";
+import { Zip, ZipDeflate } from "fflate";
 import { StreamBuf } from "../../utils/stream-buf.js";
 import { RelType } from "../../xlsx/rel-type.js";
 import { StylesXform } from "../../xlsx/xform/style/styles-xform.js";
@@ -41,6 +41,7 @@ class WorkbookWriter {
   _worksheets: any[];
   views: any[];
   zipOptions?: any;
+  compressionLevel: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   media: any[];
   commentRefs: any[];
   zip: any;
@@ -68,6 +69,20 @@ class WorkbookWriter {
     this.views = [];
 
     this.zipOptions = options.zip;
+    // Extract compression level from zip options (supports both zlib.level and compressionOptions.level)
+    // Default compression level is 6 (good balance of speed and size)
+    const level = options.zip?.zlib?.level ?? options.zip?.compressionOptions?.level ?? 6;
+    this.compressionLevel = Math.max(0, Math.min(9, level)) as
+      | 0
+      | 1
+      | 2
+      | 3
+      | 4
+      | 5
+      | 6
+      | 7
+      | 8
+      | 9;
 
     this.media = [];
     this.commentRefs = [];
@@ -103,8 +118,8 @@ class WorkbookWriter {
   _openStream(path: string): any {
     const stream = new StreamBuf({ bufSize: 65536, batch: true });
 
-    // Create a ZipPassThrough for this file
-    const zipFile = new ZipPassThrough(path);
+    // Create a ZipDeflate for this file with compression
+    const zipFile = new ZipDeflate(path, { level: this.compressionLevel });
     this.zip.add(zipFile);
 
     // Don't pause the stream - we need data events to flow
@@ -129,8 +144,8 @@ class WorkbookWriter {
   }
 
   _addFile(data: string | Buffer, name: string, base64?: boolean): void {
-    // Helper method to add a file to the zip using fflate
-    const zipFile = new ZipPassThrough(name);
+    // Helper method to add a file to the zip using fflate with compression
+    const zipFile = new ZipDeflate(name, { level: this.compressionLevel });
     this.zip.add(zipFile);
 
     let buffer: Uint8Array;

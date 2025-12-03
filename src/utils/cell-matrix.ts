@@ -1,5 +1,30 @@
 import { colCache } from "./col-cache.js";
 
+// Helper to check for prototype pollution
+function isSafeKey(key: string | number): boolean {
+  if (typeof key === "number") {
+    return true;
+  }
+  return key !== "__proto__" && key !== "constructor" && key !== "prototype";
+}
+
+// Safe deep clone that filters out prototype pollution keys
+function safeDeepClone<T>(obj: T): T {
+  if (obj === null || typeof obj !== "object") {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => safeDeepClone(item)) as T;
+  }
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(obj)) {
+    if (isSafeKey(key)) {
+      result[key] = safeDeepClone((obj as Record<string, unknown>)[key]);
+    }
+  }
+  return result as T;
+}
+
 interface CellAddress {
   sheetName?: string;
   address: string;
@@ -66,6 +91,9 @@ class CellMatrix {
   }
 
   getCellAt(sheetName: string, rowNumber: number, colNumber: number): Cell {
+    if (!isSafeKey(sheetName)) {
+      throw new Error(`Invalid sheet name: ${sheetName}`);
+    }
     const sheet = this.sheets[sheetName] || (this.sheets[sheetName] = []);
     const row = sheet[rowNumber] || (sheet[rowNumber] = []);
     const cell =
@@ -125,7 +153,10 @@ class CellMatrix {
 
   findSheet(address: CellAddress, create: boolean): Sheet | undefined {
     const name = address.sheetName!;
-    if (this.sheets[name]) {
+    if (!isSafeKey(name)) {
+      throw new Error(`Invalid sheet name: ${name}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(this.sheets, name)) {
       return this.sheets[name];
     }
     if (create) {
@@ -136,6 +167,9 @@ class CellMatrix {
 
   findSheetRow(sheet: Sheet | undefined, address: CellAddress, create: boolean): Row | undefined {
     const { row } = address;
+    if (!isSafeKey(row)) {
+      throw new Error(`Invalid row: ${row}`);
+    }
     if (sheet && sheet[row]) {
       return sheet[row];
     }
@@ -147,12 +181,15 @@ class CellMatrix {
 
   findRowCell(row: Row | undefined, address: CellAddress, create: boolean): Cell | undefined {
     const { col } = address;
+    if (!isSafeKey(col)) {
+      throw new Error(`Invalid column: ${col}`);
+    }
     if (row && row[col]) {
       return row[col];
     }
     if (create) {
       return (row![col] = this.template
-        ? Object.assign(address, JSON.parse(JSON.stringify(this.template)))
+        ? { ...address, ...safeDeepClone(this.template) }
         : address);
     }
     return undefined;

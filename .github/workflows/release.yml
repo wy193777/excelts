@@ -20,12 +20,24 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check if commit has version tag
+        id: check_tag
+        run: |
+          if git describe --exact-match --tags HEAD 2>/dev/null | grep -q "^v"; then
+            echo "has_tag=true" >> $GITHUB_OUTPUT
+            echo "Commit has version tag, skipping canary release"
+          else
+            echo "has_tag=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Install pnpm
+        if: steps.check_tag.outputs.has_tag == 'false'
         uses: pnpm/action-setup@v4
         with:
           version: 10
 
       - name: Use Node.js 24
+        if: steps.check_tag.outputs.has_tag == 'false'
         uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -33,20 +45,25 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
+        if: steps.check_tag.outputs.has_tag == 'false'
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
+        if: steps.check_tag.outputs.has_tag == 'false'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run tests
+        if: steps.check_tag.outputs.has_tag == 'false'
         run: pnpm run test
 
       - name: Build
+        if: steps.check_tag.outputs.has_tag == 'false'
         run: pnpm run build
         env:
           CI: true
 
       - name: Generate canary version
+        if: steps.check_tag.outputs.has_tag == 'false'
         id: canary_version
         env:
           CI: true
@@ -59,11 +76,13 @@ jobs:
           npm version ${CANARY_VERSION} --no-git-tag-version
 
       - name: Publish canary to npm
+        if: steps.check_tag.outputs.has_tag == 'false'
         run: pnpm publish --tag canary --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Comment on commit
+        if: steps.check_tag.outputs.has_tag == 'false'
         uses: actions/github-script@v7
         with:
           script: |

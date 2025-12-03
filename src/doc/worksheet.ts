@@ -111,7 +111,7 @@ class Worksheet {
   declare public _name: string;
   declare public state: string;
   declare public _rows: any[];
-  declare public _columns: any[] | null;
+  declare public _columns: any[];
   declare public _keys: { [key: string]: any };
   declare public _merges: { [key: string]: Range };
   declare public rowBreaks: any[];
@@ -323,7 +323,7 @@ class Worksheet {
   // Columns
 
   // get the current columns array.
-  get columns(): any[] | null {
+  get columns(): any[] {
     return this._columns;
   }
 

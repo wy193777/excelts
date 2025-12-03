@@ -32,7 +32,7 @@ class Column {
   declare public _number: number;
   declare public _header: any;
   declare public _key: string | undefined;
-  declare public width: number | undefined;
+  declare public width?: number;
   declare public _hidden: boolean | undefined;
   declare public _outlineLevel: number | undefined;
   declare public style: any;

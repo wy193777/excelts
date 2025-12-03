@@ -3,6 +3,8 @@ export * from "./doc/enums.js";
 
 export * from "./types.js";
 
+export * from "./utils/extra-utils.js";
+
 // Export CSV class and types
 export type {
   FastCsvParserOptionsArgs,

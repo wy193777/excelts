@@ -3,7 +3,6 @@ import { EventEmitter } from "events";
 import { PassThrough, Readable } from "stream";
 import os from "os";
 import { join } from "path";
-import { Parse } from "unzipper";
 import { iterateStream } from "../../utils/iterate-stream.js";
 import { parseSax } from "../../utils/parse-sax.js";
 import { StylesXform } from "../../xlsx/xform/style/styles-xform.js";
@@ -11,6 +10,7 @@ import { WorkbookXform } from "../../xlsx/xform/book/workbook-xform.js";
 import { RelationshipsXform } from "../../xlsx/xform/core/relationships-xform.js";
 import { WorksheetReader } from "./worksheet-reader.js";
 import { HyperlinkReader } from "./hyperlink-reader.js";
+import { createParse } from "../../utils/unzip/parse.js";
 
 interface WorkbookReaderOptions {
   worksheets?: string;
@@ -104,7 +104,7 @@ class WorkbookReader extends EventEmitter {
       this.options = options;
     }
     const stream = (this.stream = this._getStream(input || this.input));
-    const zip = Parse({ forceStream: true });
+    const zip = createParse({ forceStream: true });
 
     // Handle pipe errors to prevent unhandled rejection
     stream.on("error", (err: Error) => {

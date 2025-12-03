@@ -1,4 +1,4 @@
-const textEncoder = typeof global.TextEncoder === "undefined" ? null : new global.TextEncoder();
+const textEncoder = typeof TextEncoder === "undefined" ? null : new TextEncoder();
 
 function stringToBuffer(str: string | Buffer<ArrayBuffer>): Buffer<ArrayBuffer> {
   if (typeof str !== "string") {

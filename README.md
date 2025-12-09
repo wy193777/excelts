@@ -127,11 +127,11 @@ const workbook = new Workbook();
 
 - **Chrome >= 85** (August 2020)
 - **Edge >= 85** (August 2020)
-- **Firefox >= 79** (July 2020)
-- **Safari >= 14** (September 2020)
+- **Firefox >= 113** (May 2023)
+- **Safari >= 16.4** (March 2023)
 - **Opera >= 71** (September 2020)
 
-All ES2020 features (optional chaining `?.`, nullish coalescing `??`, Promise.allSettled, etc.) are natively supported in these versions.
+All modern JavaScript features are natively supported in these versions.
 
 ## Maintainer
 

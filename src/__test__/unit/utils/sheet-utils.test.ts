@@ -374,6 +374,150 @@ describe("sheet-utils", () => {
       expect(result[0].birthday).toEqual(date1);
       expect(result[1].birthday).toEqual(date2);
     });
+
+    it("should format time values correctly with raw: false (timezone-independent)", () => {
+      // Simulate what excelToDate produces for a time value
+      // Excel serial 0.00037037... = 00:00:32 (32 seconds after midnight)
+      // excelToDate does: new Date(Math.round((serial - 25569) * 86400000))
+      const timeSerial = 32 / 86400; // 32 seconds = 0.00037037...
+      const timeAsDate = new Date(Math.round((timeSerial - 25569) * 86400000));
+
+      const wb = bookNew();
+      const ws = wb.addWorksheet("Sheet1");
+
+      // Set up header
+      ws.getCell("A1").value = "time";
+
+      // Set up time cell with Date value and time format
+      const timeCell = ws.getCell("A2");
+      timeCell.value = timeAsDate;
+      timeCell.numFmt = "h:mm:ss"; // 24-hour time format
+
+      const result = sheetToJson(ws, { raw: false });
+
+      expect(result).toHaveLength(1);
+      // Time 00:00:32 should format as "0:00:32"
+      expect(result[0].time).toBe("0:00:32");
+    });
+
+    it("should format 12:30:55 AM correctly as 0:30:55 with h:mm:ss format", () => {
+      // Excel serial for 12:30:55 AM (00:30:55) = (30*60 + 55) / 86400
+      const timeSerial = (30 * 60 + 55) / 86400;
+      const timeAsDate = new Date(Math.round((timeSerial - 25569) * 86400000));
+
+      const wb = bookNew();
+      const ws = wb.addWorksheet("Sheet1");
+
+      ws.getCell("A1").value = "time";
+      const timeCell = ws.getCell("A2");
+      timeCell.value = timeAsDate;
+      timeCell.numFmt = "h:mm:ss";
+
+      const result = sheetToJson(ws, { raw: false });
+
+      expect(result[0].time).toBe("0:30:55");
+    });
+
+    it("should format time with AM/PM format correctly", () => {
+      // Excel serial for 2:30:45 PM = (14*3600 + 30*60 + 45) / 86400
+      const timeSerial = (14 * 3600 + 30 * 60 + 45) / 86400;
+      const timeAsDate = new Date(Math.round((timeSerial - 25569) * 86400000));
+
+      const wb = bookNew();
+      const ws = wb.addWorksheet("Sheet1");
+
+      ws.getCell("A1").value = "time";
+      const timeCell = ws.getCell("A2");
+      timeCell.value = timeAsDate;
+      timeCell.numFmt = "h:mm:ss AM/PM";
+
+      const result = sheetToJson(ws, { raw: false });
+
+      expect(result[0].time).toBe("2:30:45 PM");
+    });
+
+    it("should format datetime with both date and time correctly", () => {
+      // Excel serial for 2025-10-22 14:30:00
+      // Date part: 45952, Time part: (14*3600 + 30*60) / 86400
+      const dateTimeSerial = 45952 + (14 * 3600 + 30 * 60) / 86400;
+      const dateTimeAsDate = new Date(Math.round((dateTimeSerial - 25569) * 86400000));
+
+      const wb = bookNew();
+      const ws = wb.addWorksheet("Sheet1");
+
+      ws.getCell("A1").value = "datetime";
+      const cell = ws.getCell("A2");
+      cell.value = dateTimeAsDate;
+      cell.numFmt = "yyyy/m/d h:mm"; // Use m/d format to avoid mm ambiguity
+
+      const result = sheetToJson(ws, { raw: false });
+
+      expect(result[0].datetime).toBe("2025/10/22 14:30");
+    });
+
+    it("should format formula result with time format correctly", () => {
+      // Simulate a formula cell where result is a time difference
+      // For example: =B1-A1 where B1=14:30:00, A1=13:00:00, result = 1.5 hours = 1:30:00
+      // Excel serial for 1:30:00 = (1*3600 + 30*60) / 86400
+      const timeResultSerial = (1 * 3600 + 30 * 60) / 86400;
+      const timeResultAsDate = new Date(Math.round((timeResultSerial - 25569) * 86400000));
+
+      const wb = bookNew();
+      const ws = wb.addWorksheet("Sheet1");
+
+      ws.getCell("A1").value = "duration";
+      const formulaCell = ws.getCell("A2");
+      // Set formula value with Date result (as ExcelTS would do when reading)
+      formulaCell.value = {
+        formula: "B1-C1",
+        result: timeResultAsDate
+      };
+      formulaCell.numFmt = "h:mm:ss";
+
+      const result = sheetToJson(ws, { raw: false });
+
+      expect(result[0].duration).toBe("1:30:00");
+    });
+
+    it("should format formula result with number result correctly", () => {
+      // Formula with numeric result
+      const wb = bookNew();
+      const ws = wb.addWorksheet("Sheet1");
+
+      ws.getCell("A1").value = "total";
+      const formulaCell = ws.getCell("A2");
+      formulaCell.value = {
+        formula: "SUM(B1:B10)",
+        result: 1234.567
+      };
+      formulaCell.numFmt = "#,##0.00";
+
+      const result = sheetToJson(ws, { raw: false });
+
+      expect(result[0].total).toBe("1,234.57");
+    });
+
+    it("should format formula result with elapsed time format", () => {
+      // Elapsed time format [h]:mm:ss for durations > 24 hours
+      // 1.5 days = 36 hours
+      const durationSerial = 1.5;
+      const durationAsDate = new Date(Math.round((durationSerial - 25569) * 86400000));
+
+      const wb = bookNew();
+      const ws = wb.addWorksheet("Sheet1");
+
+      ws.getCell("A1").value = "elapsed";
+      const formulaCell = ws.getCell("A2");
+      formulaCell.value = {
+        formula: "B1-C1",
+        result: durationAsDate
+      };
+      formulaCell.numFmt = "[h]:mm:ss";
+
+      const result = sheetToJson(ws, { raw: false });
+
+      expect(result[0].elapsed).toBe("36:00:00");
+    });
   });
 
   // ===========================================================================

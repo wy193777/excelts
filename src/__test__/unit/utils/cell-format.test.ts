@@ -348,4 +348,54 @@ describe("cell-format", () => {
       expect(format("000-0000", 1234567)).toBe("123-4567");
     });
   });
+
+  describe("AM/PM time format", () => {
+    it("should format midnight (12 AM) as 12:00:32 AM", () => {
+      // Excel serial for midnight: 0 or any integer (time portion is 0)
+      // 0.000370370... = 32 seconds after midnight
+      const midnightSerial = 32 / 86400; // 00:00:32
+      expect(format("h:mm:ss AM/PM", midnightSerial)).toBe("12:00:32 AM");
+    });
+
+    it("should format midnight with hh as 12:00:32 AM", () => {
+      const midnightSerial = 32 / 86400; // 00:00:32
+      expect(format("hh:mm:ss AM/PM", midnightSerial)).toBe("12:00:32 AM");
+    });
+
+    it("should format noon (12 PM) as 12:00:00 PM", () => {
+      // Excel serial for noon: 0.5 (half a day)
+      // 0.5 + 32/86400 = 12:00:32 PM
+      const noonSerial = 0.5 + 32 / 86400; // 12:00:32
+      expect(format("h:mm:ss AM/PM", noonSerial)).toBe("12:00:32 PM");
+    });
+
+    it("should format noon with hh as 12:00:00 PM", () => {
+      const noonSerial = 0.5 + 32 / 86400; // 12:00:32
+      expect(format("hh:mm:ss AM/PM", noonSerial)).toBe("12:00:32 PM");
+    });
+
+    it("should format 1 AM correctly", () => {
+      // 1:00:32 AM = 1 hour + 32 seconds = (3600 + 32) / 86400
+      const serial = (3600 + 32) / 86400;
+      expect(format("h:mm:ss AM/PM", serial)).toBe("1:00:32 AM");
+    });
+
+    it("should format 1 PM correctly", () => {
+      // 1:00:32 PM = 13 hours + 32 seconds = (13 * 3600 + 32) / 86400
+      const serial = (13 * 3600 + 32) / 86400;
+      expect(format("h:mm:ss AM/PM", serial)).toBe("1:00:32 PM");
+    });
+
+    it("should format 11 AM correctly", () => {
+      // 11:00:32 AM = 11 hours + 32 seconds
+      const serial = (11 * 3600 + 32) / 86400;
+      expect(format("h:mm:ss AM/PM", serial)).toBe("11:00:32 AM");
+    });
+
+    it("should format 11 PM correctly", () => {
+      // 11:00:32 PM = 23 hours + 32 seconds
+      const serial = (23 * 3600 + 32) / 86400;
+      expect(format("h:mm:ss AM/PM", serial)).toBe("11:00:32 PM");
+    });
+  });
 });

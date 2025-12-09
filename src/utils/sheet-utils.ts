@@ -8,15 +8,137 @@ import type { Worksheet } from "../doc/worksheet.js";
 import type { Cell } from "../doc/cell.js";
 import { colCache } from "./col-cache.js";
 import type { CellValue } from "../types.js";
-import { dateToExcel } from "./utils.js";
 import { format as cellFormat } from "./cell-format.js";
+
+/**
+ * Convert a Date object back to Excel serial number without timezone issues.
+ * This reverses the excelToDate conversion exactly.
+ * excelToDate uses: new Date(Math.round((v - 25569) * 24 * 3600 * 1000))
+ * So we reverse it: (date.getTime() / (24 * 3600 * 1000)) + 25569
+ */
+function dateToExcelSerial(d: Date): number {
+  return d.getTime() / (24 * 3600 * 1000) + 25569;
+}
+
+/**
+ * Check if format is a pure time format (no date components like y, m for month, d)
+ * Time formats only contain: h, m (minutes in time context), s, AM/PM
+ * Excludes elapsed time formats like [h]:mm:ss which should keep full serial number
+ */
+function isTimeOnlyFormat(fmt: string): boolean {
+  // Remove quoted strings first
+  const cleaned = fmt.replace(/"[^"]*"/g, "");
+
+  // Elapsed time formats [h], [m], [s] should NOT be treated as time-only
+  // They need the full serial number to calculate total hours/minutes/seconds
+  if (/\[[hms]\]/i.test(cleaned)) {
+    return false;
+  }
+
+  // Remove color codes and conditions (but we already checked for [h], [m], [s])
+  const withoutBrackets = cleaned.replace(/\[[^\]]*\]/g, "");
+
+  // Check if it has time components (h, s, or AM/PM)
+  const hasTimeComponents = /[hs]/i.test(withoutBrackets) || /AM\/PM|A\/P/i.test(withoutBrackets);
+
+  // Check if it has date components (y, d, or m not adjacent to h/s which would make it minutes)
+  // In Excel: "m" after "h" or before "s" is minutes, otherwise it's month
+  const hasDateComponents = /[yd]/i.test(withoutBrackets);
+
+  // If it has time but no date components, it's a time-only format
+  // Also check for standalone 'm' that's not minutes (not near h or s)
+  if (hasDateComponents) {
+    return false;
+  }
+
+  // Check for month 'm' - if 'm' exists but not in h:m or m:s context, it's a date format
+  if (/m/i.test(withoutBrackets) && !hasTimeComponents) {
+    return false;
+  }
+
+  return hasTimeComponents;
+}
+
+/**
+ * Check if format is a date format (contains y, d, or month-m)
+ * Used to determine if dateFormat override should be applied
+ */
+function isDateFormat(fmt: string): boolean {
+  // Remove quoted strings first
+  const cleaned = fmt.replace(/"[^"]*"/g, "");
+
+  // Elapsed time formats [h], [m], [s] are NOT date formats
+  if (/\[[hms]\]/i.test(cleaned)) {
+    return false;
+  }
+
+  // Remove color codes and conditions
+  const withoutBrackets = cleaned.replace(/\[[^\]]*\]/g, "");
+
+  // Check for year or day components
+  if (/[yd]/i.test(withoutBrackets)) {
+    return true;
+  }
+
+  // Check for month 'm' - only if it's NOT in time context (not near h or s)
+  // In Excel: "m" after "h" or before "s" is minutes, otherwise it's month
+  if (/m/i.test(withoutBrackets)) {
+    const hasTimeComponents = /[hs]/i.test(withoutBrackets) || /AM\/PM|A\/P/i.test(withoutBrackets);
+    // If no time components, 'm' is month
+    if (!hasTimeComponents) {
+      return true;
+    }
+    // If has time components, need to check if 'm' is month or minutes
+    // Simplified: if format has both date-like and time-like patterns, consider it a date format
+    // e.g., "m/d/yy h:mm" - has 'm' as month and 'mm' as minutes
+  }
+
+  return false;
+}
+
+/**
+ * Format a value (Date, number, boolean, string) according to the given format
+ * Handles timezone-independent conversion for Date objects
+ * @param value - The value to format
+ * @param fmt - The format string to use
+ * @param dateFormat - Optional override format for date values (not applied to time or elapsed time formats)
+ */
+function formatValue(
+  value: Date | number | boolean | string,
+  fmt: string,
+  dateFormat?: string
+): string {
+  // Date object - convert back to Excel serial number
+  if (value instanceof Date) {
+    let serial = dateToExcelSerial(value);
+
+    // For time-only formats, use only the fractional part (time portion)
+    if (isTimeOnlyFormat(fmt)) {
+      serial = serial % 1;
+      if (serial < 0) {
+        serial += 1;
+      }
+      return cellFormat(fmt, serial);
+    }
+
+    // Only apply dateFormat override to actual date formats
+    // (not elapsed time formats like [h]:mm:ss)
+    const actualFmt = dateFormat && isDateFormat(fmt) ? dateFormat : fmt;
+    return cellFormat(actualFmt, serial);
+  }
+
+  // Number/Boolean/String - let cellFormat handle it
+  return cellFormat(fmt, value);
+}
 
 /**
  * Get formatted display text for a cell value
  * Returns the value formatted according to the cell's numFmt
- * This matches Excel's display exactly
+ * This matches Excel's display exactly (timezone-independent)
+ * @param cell - The cell to get display text for
+ * @param dateFormat - Optional override format for date values
  */
-function getCellDisplayText(cell: Cell): string {
+function getCellDisplayText(cell: Cell, dateFormat?: string): string {
   const value = cell.value;
   const fmt = cell.numFmt || "General";
 
@@ -25,18 +147,35 @@ function getCellDisplayText(cell: Cell): string {
     return "";
   }
 
-  // Date object - convert to Excel serial number
-  if (value instanceof Date) {
-    const serial = dateToExcel(value, false);
-    return cellFormat(fmt, serial);
+  // Date/Number/Boolean/String - format directly
+  if (
+    value instanceof Date ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "string"
+  ) {
+    return formatValue(value, fmt, dateFormat);
   }
 
-  // Number/Boolean/String - let cellFormat handle it
-  if (typeof value === "number" || typeof value === "boolean" || typeof value === "string") {
-    return cellFormat(fmt, value);
+  // Formula type - use the result value
+  if (typeof value === "object" && "formula" in value) {
+    const result = value.result;
+
+    if (result == null) {
+      return "";
+    }
+
+    if (
+      result instanceof Date ||
+      typeof result === "number" ||
+      typeof result === "boolean" ||
+      typeof result === "string"
+    ) {
+      return formatValue(result, fmt, dateFormat);
+    }
   }
 
-  // Fallback to cell.text for other types (rich text, hyperlink, error, formula, etc.)
+  // Fallback to cell.text for other types (rich text, hyperlink, error, etc.)
   return cell.text;
 }
 
@@ -165,7 +304,7 @@ export interface JSON2SheetOpts {
   /** Use specified field order (default Object.keys) */
   header?: string[];
   /** Use specified date format in string output */
-  dateNF?: string;
+  dateFormat?: string;
   /** Store dates as type d (default is n) */
   cellDates?: boolean;
   /** If true, do not include header row in output */
@@ -331,6 +470,12 @@ export interface Sheet2JSONOpts {
   defval?: CellValue;
   /** Include blank lines in the output */
   blankrows?: boolean;
+  /**
+   * Override format for date values (not applied to time-only formats).
+   * When provided, Date values will be formatted using this format string.
+   * @example "dd/mm/yyyy" or "yyyy-mm-dd"
+   */
+  dateFormat?: string;
 }
 
 /**
@@ -388,7 +533,7 @@ export function sheetToJson<T = JSONRow>(worksheet: Worksheet, opts?: Sheet2JSON
 
       for (let col = startCol; col <= endCol; col++) {
         const cell = worksheet.getCell(row, col);
-        const val = o.raw === false ? getCellDisplayText(cell).trim() : cell.value;
+        const val = o.raw === false ? getCellDisplayText(cell, o.dateFormat).trim() : cell.value;
 
         if (val != null && val !== "") {
           rowData[col - startCol] = val;
@@ -420,7 +565,7 @@ export function sheetToJson<T = JSONRow>(worksheet: Worksheet, opts?: Sheet2JSON
 
       for (let col = startCol; col <= endCol; col++) {
         const cell = worksheet.getCell(row, col);
-        const val = o.raw === false ? getCellDisplayText(cell).trim() : cell.value;
+        const val = o.raw === false ? getCellDisplayText(cell, o.dateFormat).trim() : cell.value;
         const key = encodeCol(col - 1); // 0-indexed for encodeCol
 
         if (val != null && val !== "") {
@@ -452,7 +597,7 @@ export function sheetToJson<T = JSONRow>(worksheet: Worksheet, opts?: Sheet2JSON
         const colIdx = col - startCol;
         const key = headerOpt[colIdx] ?? `__EMPTY_${colIdx}`;
         const cell = worksheet.getCell(row, col);
-        const val = o.raw === false ? getCellDisplayText(cell).trim() : cell.value;
+        const val = o.raw === false ? getCellDisplayText(cell, o.dateFormat).trim() : cell.value;
 
         if (val != null && val !== "") {
           rowData[key] = val;
@@ -502,7 +647,7 @@ export function sheetToJson<T = JSONRow>(worksheet: Worksheet, opts?: Sheet2JSON
 
     for (let col = startCol; col <= endCol; col++) {
       const cell = worksheet.getCell(row, col);
-      const val = o.raw === false ? getCellDisplayText(cell).trim() : cell.value;
+      const val = o.raw === false ? getCellDisplayText(cell, o.dateFormat).trim() : cell.value;
       const key = headers[col - startCol];
 
       if (val != null && val !== "") {
@@ -650,7 +795,7 @@ export interface AOA2SheetOpts {
   /** Use specified cell as starting point */
   origin?: Origin;
   /** Use specified date format in string output */
-  dateNF?: string;
+  dateFormat?: string;
   /** Store dates as type d (default is n) */
   cellDates?: boolean;
 }

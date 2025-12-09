@@ -232,23 +232,27 @@ const DAYS_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frid
  * @param fmt Format string
  */
 function formatDate(serial: number, fmt: string): string {
-  const date = excelToDate(serial, false);
+  // Extract time components directly from serial number (timezone-agnostic)
+  const totalSeconds = Math.round(serial * 86400);
+  const timeOfDay = totalSeconds % 86400;
+  const hours = Math.floor(timeOfDay / 3600);
+  const minutes = Math.floor((timeOfDay % 3600) / 60);
+  const seconds = timeOfDay % 60;
 
-  const year = date.getFullYear();
-  const month = date.getMonth(); // 0-indexed
-  const day = date.getDate();
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  const seconds = date.getSeconds();
-  const dayOfWeek = date.getDay();
+  // For date components, use excelToDate but only for date parts
+  const date = excelToDate(serial, false);
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth(); // 0-indexed
+  const day = date.getUTCDate();
+  const dayOfWeek = date.getUTCDay();
 
   // Calculate fractional seconds from serial
-  const totalSeconds = serial * 86400;
-  const fractionalSeconds = totalSeconds - Math.floor(totalSeconds);
+  const fractionalSeconds = serial * 86400 - Math.floor(serial * 86400);
 
   // Check for AM/PM
   const hasAmPm = /AM\/PM|A\/P/i.test(fmt);
   const isPm = hours >= 12;
+  // Standard 12-hour format: 0 and 12 both display as 12
   const hours12 = hours % 12 || 12;
 
   // Remove color codes like [Red], [Green], etc. but keep elapsed time brackets

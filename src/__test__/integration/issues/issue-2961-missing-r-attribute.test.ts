@@ -15,7 +15,7 @@ describe("github issues", () => {
     it("should read xlsx file with missing r attributes on rows and cells", async () => {
       const wb = new Workbook();
       // example.xlsx is exported by DataGrip/IDEA and has no r attributes
-      const filePath = path.resolve(__dirname, "../../../../example.xlsx");
+      const filePath = path.resolve(__dirname, "../data/issue-2961-missing-r-attribute.xlsx");
       await wb.xlsx.readFile(filePath);
 
       const ws = wb.worksheets[0];
@@ -41,7 +41,7 @@ describe("github issues", () => {
 
     it("should correctly infer cell addresses when r attribute is missing", async () => {
       const wb = new Workbook();
-      const filePath = path.resolve(__dirname, "../../../../example.xlsx");
+      const filePath = path.resolve(__dirname, "../data/issue-2961-missing-r-attribute.xlsx");
       await wb.xlsx.readFile(filePath);
 
       const ws = wb.worksheets[0];
@@ -57,7 +57,7 @@ describe("github issues", () => {
 
     it("should be able to write the file back after reading", async () => {
       const wb = new Workbook();
-      const filePath = path.resolve(__dirname, "../../../../example.xlsx");
+      const filePath = path.resolve(__dirname, "../data/issue-2961-missing-r-attribute.xlsx");
       await wb.xlsx.readFile(filePath);
 
       // Writing to buffer should not throw

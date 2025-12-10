@@ -15,6 +15,8 @@ const fakeStyles = {
     switch (styleId) {
       case 1:
         return { numFmt: "mm-dd-yy" };
+      case 2:
+        return { numFmt: "mmm-yy" };
       default:
         return null;
     }
@@ -510,6 +512,43 @@ const expectations = [
       ref: "A2:B2",
       formula: "A1",
       result: 2
+    },
+    tests: ["render", "renderIn", "parse", "reconcile"],
+    options: {
+      styles: fakeStyles,
+      hyperlinks: [],
+      hyperlinkMap: fakeHyperlinkMap,
+      formulae: {},
+      siFormulae: 0
+    }
+  },
+  // Issue #2970: String formula result with date format should not be converted to date
+  {
+    title: "String Formula with Date Format (Issue #2970)",
+    create() {
+      return new CellXform();
+    },
+    preparedModel: {
+      address: "A2",
+      type: Enums.ValueType.Formula,
+      formula: "A1",
+      result: "test",
+      styleId: 2
+    },
+    xml: '<c r="A2" s="2" t="str"><f>A1</f><v>test</v></c>',
+    parsedModel: {
+      address: "A2",
+      type: Enums.ValueType.Formula,
+      formula: "A1",
+      result: "test",
+      styleId: 2
+    },
+    reconciledModel: {
+      address: "A2",
+      type: Enums.ValueType.Formula,
+      formula: "A1",
+      result: "test",
+      style: { numFmt: "mmm-yy" }
     },
     tests: ["render", "renderIn", "parse", "reconcile"],
     options: {

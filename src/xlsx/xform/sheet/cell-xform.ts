@@ -458,7 +458,14 @@ class CellXform extends BaseXform {
         break;
 
       case Enums.ValueType.Formula:
-        if (model.result !== undefined && style && isDateFmt(style.numFmt)) {
+        // Only convert formula result to date if the result is a number
+        // String results (t="str") should not be converted even if the cell has a date format
+        if (
+          model.result !== undefined &&
+          typeof model.result === "number" &&
+          style &&
+          isDateFmt(style.numFmt)
+        ) {
           model.result = excelToDate(model.result, options.date1904);
         }
         if (model.shareType === "shared") {

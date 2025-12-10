@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { testUtils } from "../utils/index.js";
-import { WorkbookWriter, ValueType } from "../../index.js";
+import { Workbook, WorkbookWriter, ValueType } from "../../index.js";
 
 const CONCATENATE_HELLO_WORLD = 'CONCATENATE("Hello", ", ", "World!")';
 
@@ -466,6 +466,41 @@ describe("WorksheetWriter", () => {
       row = ws.getRow(2);
       row.addPageBreak();
       expect(ws.rowBreaks.length).toBe(2);
+    });
+  });
+
+  // Issue #2970: String formula result with date format should not be converted to date
+  describe("Issue #2970", () => {
+    it("preserves string formula result with date format", async () => {
+      const wb = new Workbook();
+      const ws = wb.addWorksheet("Sheet1");
+
+      // Set up a cell with text and date format (mmm-yy)
+      ws.getCell("A1").value = "test";
+      ws.getCell("A1").numFmt = "mmm-yy";
+
+      // Set up a formula that references the text cell
+      ws.getCell("A2").value = { formula: "A1", result: "test" };
+      ws.getCell("A2").numFmt = "mmm-yy";
+
+      // Write to buffer
+      const buffer = await wb.xlsx.writeBuffer();
+
+      // Read back
+      const wb2 = new Workbook();
+      await wb2.xlsx.load(buffer);
+
+      const ws2 = wb2.getWorksheet("Sheet1");
+
+      // Verify A1 is preserved as string
+      expect(ws2.getCell("A1").value).toBe("test");
+      expect(ws2.getCell("A1").numFmt).toBe("mmm-yy");
+
+      // Verify A2 formula result is preserved as string, not converted to Invalid Date
+      const cellA2 = ws2.getCell("A2");
+      expect(cellA2.formula).toBe("A1");
+      expect(cellA2.result).toBe("test");
+      expect(typeof cellA2.result).toBe("string");
     });
   });
 });

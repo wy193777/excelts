@@ -58,16 +58,59 @@ class DefinedNamesXform extends BaseXform {
   }
 }
 
+// Regex to validate cell range format:
+// - Cell: $A$1 or A1
+// - Range: $A$1:$B$10 or A1:B10
+// - Row range: $1:$2 (for print titles)
+// - Column range: $A:$B (for print titles)
+const cellRangeRegexp = /^[$]?[A-Za-z]{1,3}[$]?\d+(:[$]?[A-Za-z]{1,3}[$]?\d+)?$/;
+const rowRangeRegexp = /^[$]?\d+:[$]?\d+$/;
+const colRangeRegexp = /^[$]?[A-Za-z]{1,3}:[$]?[A-Za-z]{1,3}$/;
+
 function isValidRange(range: string): boolean {
+  // Skip array constants wrapped in {} - these are not valid cell ranges
+  // e.g., {"'Sheet1'!$A$1:$B$10"} or {#N/A,#N/A,FALSE,"text"}
+  if (range.startsWith("{") || range.endsWith("}")) {
+    return false;
+  }
+
+  // Extract the cell reference part (after the sheet name if present)
+  const cellRef = range.split("!").pop() || "";
+
+  // Must match one of the valid patterns
+  if (
+    !cellRangeRegexp.test(cellRef) &&
+    !rowRangeRegexp.test(cellRef) &&
+    !colRangeRegexp.test(cellRef)
+  ) {
+    return false;
+  }
+
   try {
-    colCache.decodeEx(range);
-    return true;
+    const decoded = colCache.decodeEx(range);
+    // For cell ranges: row/col or top/bottom/left/right should be valid numbers
+    // For row ranges ($1:$2): top/bottom are numbers, left/right are null
+    // For column ranges ($A:$B): left/right are numbers, top/bottom are null
+    if (
+      ("row" in decoded && typeof decoded.row === "number") ||
+      ("top" in decoded && typeof decoded.top === "number") ||
+      ("left" in decoded && typeof decoded.left === "number")
+    ) {
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
 }
 
 function extractRanges(parsedText: string): string[] {
+  // Skip if the entire text is wrapped in {} (array constant)
+  const trimmed = parsedText.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return [];
+  }
+
   const ranges: string[] = [];
   let quotesOpened = false;
   let last = "";

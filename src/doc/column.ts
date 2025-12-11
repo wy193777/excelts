@@ -1,6 +1,9 @@
 import { colCache } from "../utils/col-cache.js";
 import { isEqual } from "../utils/under-dash.js";
 import { Enums } from "./enums.js";
+import type { Cell } from "./cell.js";
+import type { Row } from "./row.js";
+import type { Worksheet } from "./worksheet.js";
 
 const DEFAULT_COLUMN_WIDTH = 9;
 
@@ -28,14 +31,14 @@ interface ColumnModel {
 // This includes header rows, widths, key, (style), etc.
 // Worksheet will condense the columns as appropriate during serialization
 class Column {
-  declare public _worksheet: any;
+  declare public _worksheet: Worksheet;
   declare public _number: number;
-  declare public _header: any;
+  declare public _header: string | string[] | undefined;
   declare public _key: string | undefined;
   declare public width?: number;
   declare public _hidden: boolean | undefined;
   declare public _outlineLevel: number | undefined;
-  declare public style: any;
+  declare public style: Record<string, unknown>;
 
   constructor(worksheet: any, number: number, defn?: any) {
     this._worksheet = worksheet;
@@ -191,15 +194,21 @@ class Column {
     return this.headers.length;
   }
 
-  eachCell(options: any, iteratee?: any): void {
+  eachCell(
+    options: { includeEmpty?: boolean } | ((cell: Cell, rowNumber: number) => void),
+    iteratee?: (cell: Cell, rowNumber: number) => void
+  ): void {
     const colNumber = this.number;
     if (!iteratee) {
-      iteratee = options;
-      options = null;
+      iteratee = options as (cell: Cell, rowNumber: number) => void;
+      options = {};
     }
-    this._worksheet.eachRow(options, (row: any, rowNumber: number) => {
-      iteratee(row.getCell(colNumber), rowNumber);
-    });
+    this._worksheet.eachRow(
+      options as { includeEmpty?: boolean },
+      (row: Row, rowNumber: number) => {
+        iteratee!(row.getCell(colNumber), rowNumber);
+      }
+    );
   }
 
   get values(): any[] {

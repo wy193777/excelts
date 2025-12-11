@@ -3,6 +3,10 @@ import { Enums } from "./enums.js";
 import { Note } from "./note.js";
 import { escapeHtml } from "../utils/under-dash.js";
 import { slideFormula } from "../utils/shared-formula.js";
+import type { Row } from "./row.js";
+import type { Column } from "./column.js";
+import type { Worksheet } from "./worksheet.js";
+import type { Workbook } from "./workbook.js";
 
 interface HyperlinkValueData {
   text?: string;
@@ -55,15 +59,15 @@ class Cell {
   static Types = Enums.ValueType;
 
   // Type declarations only - no runtime overhead
-  declare public _row: any;
-  declare public _column: any;
+  declare public _row: Row;
+  declare public _column: Column;
   declare public _address: string;
   declare public _value: any;
-  declare public style: any;
+  declare public style: Record<string, unknown>;
   declare public _mergeCount: number;
   declare public _comment?: any;
 
-  constructor(row: any, column: any, address: string) {
+  constructor(row: Row, column: Column, address: string) {
     if (!row || !column) {
       throw new Error("A Cell needs a Row");
     }
@@ -82,11 +86,11 @@ class Cell {
     this._mergeCount = 0;
   }
 
-  get worksheet(): any {
+  get worksheet(): Worksheet {
     return this._row.worksheet;
   }
 
-  get workbook(): any {
+  get workbook(): Workbook {
     return this._row.worksheet.workbook;
   }
 

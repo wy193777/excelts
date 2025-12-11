@@ -674,12 +674,19 @@ class Worksheet {
   }
 
   // iterate over every row in the worksheet, including maybe empty rows
-  eachRow(iteratee: (row: any, rowNumber: number) => void): void;
-  eachRow(options: EachRowOptions, iteratee: (row: any, rowNumber: number) => void): void;
-  eachRow(options: any, iteratee?: (row: any, rowNumber: number) => void): void {
-    if (!iteratee) {
-      iteratee = options;
-      options = undefined;
+  eachRow(iteratee: (row: Row, rowNumber: number) => void): void;
+  eachRow(options: EachRowOptions, iteratee: (row: Row, rowNumber: number) => void): void;
+  eachRow(
+    optionsOrIteratee: EachRowOptions | ((row: Row, rowNumber: number) => void),
+    maybeIteratee?: (row: Row, rowNumber: number) => void
+  ): void {
+    let options: EachRowOptions | undefined;
+    let iteratee: (row: Row, rowNumber: number) => void;
+    if (typeof optionsOrIteratee === "function") {
+      iteratee = optionsOrIteratee;
+    } else {
+      options = optionsOrIteratee;
+      iteratee = maybeIteratee!;
     }
     if (options && options.includeEmpty) {
       const n = this._rows.length;

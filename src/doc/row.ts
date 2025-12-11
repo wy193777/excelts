@@ -42,8 +42,8 @@ class Row {
   // Type declarations only - no runtime overhead
   declare public _worksheet: Worksheet;
   declare public _number: number;
-  declare public _cells: any[];
-  declare public style: any;
+  declare public _cells: (Cell | undefined)[];
+  declare public style: Record<string, unknown>;
   declare public _hidden?: boolean;
   declare public _outlineLevel?: number;
   declare public height?: number;
@@ -61,7 +61,7 @@ class Row {
     return this._number;
   }
 
-  get worksheet(): any {
+  get worksheet(): Worksheet {
     return this._worksheet;
   }
 
@@ -78,12 +78,12 @@ class Row {
     delete this.style;
   }
 
-  findCell(colNumber: number): any {
+  findCell(colNumber: number): Cell | undefined {
     return this._cells[colNumber - 1];
   }
 
   // given {address, row, col}, find or create new cell
-  getCellEx(address: CellAddress): any {
+  getCellEx(address: CellAddress): Cell {
     let cell = this._cells[address.col - 1];
     if (!cell) {
       const column = this._worksheet.getColumn(address.col);
@@ -94,7 +94,7 @@ class Row {
   }
 
   // get cell by key, letter or column number
-  getCell(col: string | number): any {
+  getCell(col: string | number): Cell {
     let colNum: number;
     if (typeof col === "string") {
       // is it a key?
@@ -167,12 +167,19 @@ class Row {
   }
 
   // Iterate over all non-null cells in this row
-  eachCell(iteratee: (cell: any, colNumber: number) => void): void;
-  eachCell(options: EachCellOptions, iteratee: (cell: any, colNumber: number) => void): void;
-  eachCell(options: any, iteratee?: (cell: any, colNumber: number) => void): void {
-    if (!iteratee) {
-      iteratee = options;
-      options = null;
+  eachCell(iteratee: (cell: Cell, colNumber: number) => void): void;
+  eachCell(options: EachCellOptions, iteratee: (cell: Cell, colNumber: number) => void): void;
+  eachCell(
+    optionsOrIteratee: EachCellOptions | ((cell: Cell, colNumber: number) => void),
+    maybeIteratee?: (cell: Cell, colNumber: number) => void
+  ): void {
+    let options: EachCellOptions | null = null;
+    let iteratee: (cell: Cell, colNumber: number) => void;
+    if (typeof optionsOrIteratee === "function") {
+      iteratee = optionsOrIteratee;
+    } else {
+      options = optionsOrIteratee;
+      iteratee = maybeIteratee!;
     }
     if (options && options.includeEmpty) {
       const n = this._cells.length;

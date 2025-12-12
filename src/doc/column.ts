@@ -28,17 +28,21 @@ export interface ColumnModel {
   collapsed?: boolean;
 }
 
-// Column defines the column properties for 1 column.
-// This includes header rows, widths, key, (style), etc.
-// Worksheet will condense the columns as appropriate during serialization
+/**
+ * Column defines the column properties for 1 column.
+ * This includes header rows, widths, key, (style), etc.
+ * Worksheet will condense the columns as appropriate during serialization
+ */
 class Column {
   declare private _worksheet: Worksheet;
   declare private _number: number;
   declare private _header: string | string[] | undefined;
   declare private _key: string | undefined;
+  /** The width of the column */
   declare public width?: number;
   declare private _hidden: boolean | undefined;
   declare private _outlineLevel: number | undefined;
+  /** Styles applied to the column */
   declare public style: Partial<Style>;
 
   constructor(worksheet: Worksheet, number: number, defn?: ColumnDefn | false) {
@@ -58,6 +62,9 @@ class Column {
     return this._worksheet;
   }
 
+  /**
+   * Column letter key
+   */
   get letter(): string {
     return colCache.n2l(this._number);
   }
@@ -110,6 +117,9 @@ class Column {
     return [];
   }
 
+  /**
+   * Can be a string to set one row high header or an array to set multi-row high header
+   */
   get header(): string | string[] | undefined {
     return this._header;
   }
@@ -125,6 +135,9 @@ class Column {
     }
   }
 
+  /**
+   * The name of the properties associated with this column in each row
+   */
   get key(): string | undefined {
     return this._key;
   }
@@ -141,6 +154,9 @@ class Column {
     }
   }
 
+  /**
+   * Hides the column
+   */
   get hidden(): boolean {
     return !!this._hidden;
   }
@@ -149,6 +165,9 @@ class Column {
     this._hidden = value;
   }
 
+  /**
+   * Set an outline level for columns
+   */
   get outlineLevel(): number {
     return this._outlineLevel || 0;
   }
@@ -157,6 +176,9 @@ class Column {
     this._outlineLevel = value;
   }
 
+  /**
+   * Indicate the collapsed state based on outlineLevel
+   */
   get collapsed(): boolean {
     return !!(
       this._outlineLevel && this._outlineLevel >= this._worksheet.properties.outlineLevelCol
@@ -210,23 +232,39 @@ class Column {
     return this.headers.length;
   }
 
+  /**
+   * Iterate over all current cells in this column
+   */
+  eachCell(callback: (cell: Cell, rowNumber: number) => void): void;
+  /**
+   * Iterate over all current cells in this column including empty cells
+   */
   eachCell(
-    options: { includeEmpty?: boolean } | ((cell: Cell, rowNumber: number) => void),
-    iteratee?: (cell: Cell, rowNumber: number) => void
+    opt: { includeEmpty?: boolean },
+    callback: (cell: Cell, rowNumber: number) => void
+  ): void;
+  eachCell(
+    optionsOrCallback: { includeEmpty?: boolean } | ((cell: Cell, rowNumber: number) => void),
+    maybeCallback?: (cell: Cell, rowNumber: number) => void
   ): void {
     const colNumber = this.number;
-    if (!iteratee) {
-      iteratee = options as (cell: Cell, rowNumber: number) => void;
+    let options: { includeEmpty?: boolean };
+    let callback: (cell: Cell, rowNumber: number) => void;
+    if (typeof optionsOrCallback === "function") {
       options = {};
+      callback = optionsOrCallback;
+    } else {
+      options = optionsOrCallback;
+      callback = maybeCallback!;
     }
-    this._worksheet.eachRow(
-      options as { includeEmpty?: boolean },
-      (row: Row, rowNumber: number) => {
-        iteratee!(row.getCell(colNumber), rowNumber);
-      }
-    );
+    this._worksheet.eachRow(options, (row: Row, rowNumber: number) => {
+      callback(row.getCell(colNumber), rowNumber);
+    });
   }
 
+  /**
+   * The cell values in the column
+   */
   get values(): CellValueType[] {
     const v: CellValueType[] = [];
     this.eachCell((cell, rowNumber) => {

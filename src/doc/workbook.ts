@@ -101,6 +101,9 @@ class Workbook {
     this._definedNames = new DefinedNames();
   }
 
+  /**
+   * xlsx file format operations
+   */
   get xlsx(): XLSX {
     if (!this._xlsx) {
       this._xlsx = new XLSX(this);
@@ -108,6 +111,9 @@ class Workbook {
     return this._xlsx;
   }
 
+  /**
+   * csv file format operations
+   */
   get csv(): CSV {
     if (!this._csv) {
       this._csv = new CSV(this);
@@ -125,6 +131,9 @@ class Workbook {
     return this._worksheets.length || 1;
   }
 
+  /**
+   * Add a new worksheet and return a reference to it
+   */
   addWorksheet(name?: string, options?: AddWorksheetOptions): Worksheet {
     const id = this.nextId;
 
@@ -157,6 +166,9 @@ class Workbook {
     }
   }
 
+  /**
+   * Fetch sheet by name or id
+   */
   getWorksheet(id?: number | string): Worksheet | undefined {
     if (id === undefined) {
       return this._worksheets.find(Boolean);
@@ -170,6 +182,9 @@ class Workbook {
     return undefined;
   }
 
+  /**
+   * Return a clone of worksheets in order
+   */
   get worksheets(): Worksheet[] {
     // return a clone of _worksheets
     return this._worksheets
@@ -178,9 +193,14 @@ class Workbook {
       .filter(Boolean);
   }
 
-  eachSheet(iteratee: (sheet: Worksheet, id: number) => void): void {
+  /**
+   * Iterate over all sheets.
+   *
+   * Note: `workbook.worksheets.forEach` will still work but this is better.
+   */
+  eachSheet(callback: (sheet: Worksheet, id: number) => void): void {
     this.worksheets.forEach(sheet => {
-      iteratee(sheet, sheet.id);
+      callback(sheet, sheet.id);
     });
   }
 
@@ -193,6 +213,9 @@ class Workbook {
     this._themes = undefined;
   }
 
+  /**
+   * Add Image to Workbook and return the id
+   */
   addImage(image: Image): number {
     // TODO:  validation?
     const id = this.media.length;

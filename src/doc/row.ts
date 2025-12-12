@@ -35,11 +35,6 @@ export interface RowModel {
   collapsed: boolean;
 }
 
-// Internal interface for eachCell options
-interface EachCellOptions {
-  includeEmpty?: boolean;
-}
-
 class Row {
   // Type declarations only - no runtime overhead
   declare private _worksheet: Worksheet;
@@ -58,22 +53,32 @@ class Row {
     this.outlineLevel = 0;
   }
 
-  // return the row number
+  /**
+   * The row number
+   */
   get number(): number {
     return this._number;
   }
 
+  /**
+   * The worksheet that contains this row
+   */
   get worksheet(): Worksheet {
     return this._worksheet;
   }
 
-  // Inform Streaming Writer that this row (and all rows before it) are complete
-  // and ready to write. Has no effect on Worksheet document
+  /**
+   * Commit a completed row to stream.
+   * Inform Streaming Writer that this row (and all rows before it) are complete
+   * and ready to write. Has no effect on Worksheet document.
+   */
   commit(): void {
     this._worksheet._commitRow(this);
   }
 
-  // helps GC by breaking cyclic references
+  /**
+   * Helps GC by breaking cyclic references
+   */
   destroy(): void {
     delete this._worksheet;
     delete this._cells;
@@ -95,7 +100,9 @@ class Row {
     return cell;
   }
 
-  // get cell by key, letter or column number
+  /**
+   * Get cell by number, column letter or column key
+   */
   getCell(col: string | number): Cell {
     let colNum: number;
     if (typeof col === "string") {
@@ -119,7 +126,11 @@ class Row {
     );
   }
 
-  // remove cell(s) and shift all higher cells down by count
+  /**
+   * Cut one or more cells (cells to the right are shifted left)
+   *
+   * Note: this operation will not affect other rows
+   */
   splice(start: number, count: number, ...inserts: CellValue[]): void {
     const nKeep = start + count;
     const nExpand = inserts.length - count;
@@ -168,30 +179,38 @@ class Row {
     }
   }
 
-  // Iterate over all non-null cells in this row
-  eachCell(iteratee: (cell: Cell, colNumber: number) => void): void;
-  eachCell(options: EachCellOptions, iteratee: (cell: Cell, colNumber: number) => void): void;
+  /**
+   * Iterate over all non-null cells in a row
+   */
+  eachCell(callback: (cell: Cell, colNumber: number) => void): void;
+  /**
+   * Iterate over all cells in a row (including empty cells)
+   */
   eachCell(
-    optionsOrIteratee: EachCellOptions | ((cell: Cell, colNumber: number) => void),
-    maybeIteratee?: (cell: Cell, colNumber: number) => void
+    opt: { includeEmpty?: boolean },
+    callback: (cell: Cell, colNumber: number) => void
+  ): void;
+  eachCell(
+    optOrCallback: { includeEmpty?: boolean } | ((cell: Cell, colNumber: number) => void),
+    maybeCallback?: (cell: Cell, colNumber: number) => void
   ): void {
-    let options: EachCellOptions | null = null;
-    let iteratee: (cell: Cell, colNumber: number) => void;
-    if (typeof optionsOrIteratee === "function") {
-      iteratee = optionsOrIteratee;
+    let options: { includeEmpty?: boolean } | null = null;
+    let callback: (cell: Cell, colNumber: number) => void;
+    if (typeof optOrCallback === "function") {
+      callback = optOrCallback;
     } else {
-      options = optionsOrIteratee;
-      iteratee = maybeIteratee!;
+      options = optOrCallback;
+      callback = maybeCallback!;
     }
     if (options && options.includeEmpty) {
       const n = this._cells.length;
       for (let i = 1; i <= n; i++) {
-        iteratee(this.getCell(i), i);
+        callback(this.getCell(i), i);
       }
     } else {
       this._cells.forEach((cell, index) => {
         if (cell && cell.type !== Enums.ValueType.Null) {
-          iteratee(cell, index + 1);
+          callback(cell, index + 1);
         }
       });
     }
@@ -215,7 +234,9 @@ class Row {
     ws.rowBreaks.push(pb);
   }
 
-  // return a sparse array of cell values
+  /**
+   * Get a row as a sparse array
+   */
   get values(): CellValue[] {
     const values: CellValue[] = [];
     this._cells.forEach(cell => {
@@ -226,7 +247,9 @@ class Row {
     return values;
   }
 
-  // set the values by contiguous or sparse array, or by key'd object literal
+  /**
+   * Set the values by contiguous or sparse array, or by key'd object literal
+   */
   set values(value: RowValues) {
     // this operation is not additive - any prior cells are removed
     this._cells = [];
@@ -261,15 +284,23 @@ class Row {
     }
   }
 
-  // returns true if the row includes at least one cell with a value
+  /**
+   * Returns true if the row includes at least one cell with a value
+   */
   get hasValues(): boolean {
     return this._cells.some(cell => cell && cell.type !== Enums.ValueType.Null);
   }
 
+  /**
+   * Number of cells including empty ones
+   */
   get cellCount(): number {
     return this._cells.length;
   }
 
+  /**
+   * Number of non-empty cells
+   */
   get actualCellCount(): number {
     let count = 0;
     this.eachCell(() => {
@@ -278,7 +309,9 @@ class Row {
     return count;
   }
 
-  // get the min and max column number for the non-null cells in this row or null
+  /**
+   * Get the min and max column number for the non-null cells in this row or null
+   */
   get dimensions(): RowDimensions | null {
     let min = 0;
     let max = 0;

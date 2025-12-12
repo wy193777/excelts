@@ -63,10 +63,6 @@ interface WorksheetOptions {
   autoFilter?: AutoFilter | null;
 }
 
-interface EachRowOptions {
-  includeEmpty?: boolean;
-}
-
 interface PageSetupMargins {
   left: number;
   right: number;
@@ -330,16 +326,23 @@ class Worksheet {
     this._name = name;
   }
 
+  /**
+   * The workbook that contains this worksheet
+   */
   get workbook(): Workbook {
     return this._workbook;
   }
 
-  // when you're done with this worksheet, call this to remove from workbook
+  /**
+   * When you're done with this worksheet, call this to remove from workbook
+   */
   destroy(): void {
     this._workbook.removeWorksheetEx(this);
   }
 
-  // Get the bounding range of the cells in this worksheet
+  /**
+   * Get the bounding range of the cells in this worksheet
+   */
   get dimensions(): Range {
     const dimensions = new Range();
     this._rows.forEach(row => {
@@ -356,13 +359,19 @@ class Worksheet {
   // =========================================================================
   // Columns
 
-  // get the current columns array.
+  /**
+   * Get the current columns array
+   */
   get columns(): Column[] {
     return this._columns;
   }
 
-  // set the columns from an array of column definitions.
-  // Note: any headers defined will overwrite existing values.
+  /**
+   * Add column headers and define column keys and widths.
+   *
+   * Note: these column structures are a workbook-building convenience only,
+   * apart from the column width, they will not be fully persisted.
+   */
   set columns(value: ColumnDefn[]) {
     // calculate max header row count
     this._headerRowCount = value.reduce((pv, cv) => {
@@ -396,7 +405,9 @@ class Worksheet {
     Object.keys(this._keys).forEach(key => f(this._keys[key], key));
   }
 
-  // get a single column by col number. If it doesn't exist, create it and any gaps before it
+  /**
+   * Access an individual column by key, letter and 1-based column number
+   */
   getColumn(c: string | number): Column {
     let colNum: number;
     if (typeof c === "string") {
@@ -423,6 +434,17 @@ class Worksheet {
     return this._columns[colNum - 1];
   }
 
+  /**
+   * Cut one or more columns (columns to the right are shifted left)
+   * and optionally insert more
+   *
+   * If column properties have been defined, they will be cut or moved accordingly
+   *
+   * Known Issue: If a splice causes any merged cells to move, the results may be unpredictable
+   *
+   * Also: If the worksheet has more rows than values in the column inserts,
+   * the rows will still be shifted as if the values existed
+   */
   spliceColumns(start: number, count: number, ...inserts: CellValue[][]): void {
     const rows = this._rows;
     const nRows = rows.length;
@@ -463,10 +485,16 @@ class Worksheet {
     this.workbook.definedNames.spliceColumns(this.name, start, count, inserts.length);
   }
 
+  /**
+   * Get the last column in a worksheet
+   */
   get lastColumn(): Column {
     return this.getColumn(this.columnCount);
   }
 
+  /**
+   * The total column size of the document. Equal to the maximum cell count from all of the rows
+   */
   get columnCount(): number {
     let maxCount = 0;
     this.eachRow(row => {
@@ -475,6 +503,9 @@ class Worksheet {
     return maxCount;
   }
 
+  /**
+   * A count of the number of columns that have values
+   */
   get actualColumnCount(): number {
     // performance nightmare - for each row, counts all the columns used
     const counts: boolean[] = [];
@@ -511,6 +542,9 @@ class Worksheet {
     return this._lastRowNumber + 1;
   }
 
+  /**
+   * Get the last editable row in a worksheet (or undefined if there are none)
+   */
   get lastRow(): Row | undefined {
     if (this._rows.length) {
       return this._rows[this._rows.length - 1];
@@ -518,20 +552,35 @@ class Worksheet {
     return undefined;
   }
 
-  // find a row (if exists) by row number
+  /**
+   * Tries to find and return row for row number, else undefined
+   *
+   * @param r - The 1-indexed row number
+   */
   findRow(r: number): Row | undefined {
     return this._rows[r - 1];
   }
 
-  // find multiple rows (if exists) by row number
+  /**
+   * Tries to find and return rows for row number start and length, else undefined
+   *
+   * @param start - The 1-indexed starting row number
+   * @param length - The length of the expected array
+   */
   findRows(start: number, length: number): (Row | undefined)[] {
     return this._rows.slice(start - 1, start - 1 + length);
   }
 
+  /**
+   * The total row size of the document. Equal to the row number of the last row that has values.
+   */
   get rowCount(): number {
     return this._lastRowNumber;
   }
 
+  /**
+   * A count of the number of rows that have values. If a mid-document row is empty, it will not be included in the count.
+   */
   get actualRowCount(): number {
     // counts actual rows that have actual data
     let count = 0;
@@ -541,8 +590,10 @@ class Worksheet {
     return count;
   }
 
-  // get a row by row number.
-  getRow(r: number): any {
+  /**
+   * Get or create row by 1-based index
+   */
+  getRow(r: number): Row {
     let row = this._rows[r - 1];
     if (!row) {
       row = this._rows[r - 1] = new Row(this, r);
@@ -550,19 +601,25 @@ class Worksheet {
     return row;
   }
 
-  // get multiple rows by row number.
-  getRows(start: number, length: number): any[] | undefined {
+  /**
+   * Get or create rows by 1-based index
+   */
+  getRows(start: number, length: number): Row[] | undefined {
     if (length < 1) {
       return undefined;
     }
-    const rows: any[] = [];
+    const rows: Row[] = [];
     for (let i = start; i < start + length; i++) {
       rows.push(this.getRow(i));
     }
     return rows;
   }
 
-  addRow(value: any, style: string = "n"): any {
+  /**
+   * Add a couple of Rows by key-value, after the last current row, using the column keys,
+   * or add a row by contiguous Array (assign to columns A, B & C)
+   */
+  addRow(value: RowValues, style: string = "n"): Row {
     const rowNo = this._nextRow;
     const row = this.getRow(rowNo);
     row.values = value;
@@ -570,7 +627,10 @@ class Worksheet {
     return row;
   }
 
-  addRows(value: any[], style: string = "n"): any[] {
+  /**
+   * Add multiple rows by providing an array of arrays or key-value pairs
+   */
+  addRows(value: RowValues[], style: string = "n"): Row[] {
     const rows: Row[] = [];
     value.forEach(row => {
       rows.push(this.addRow(row, style));
@@ -578,13 +638,21 @@ class Worksheet {
     return rows;
   }
 
-  insertRow(pos: number, value: any, style: string = "n"): any {
+  /**
+   * Insert a Row by key-value, at the position (shifting down all rows from position),
+   * using the column keys, or add a row by contiguous Array (assign to columns A, B & C)
+   */
+  insertRow(pos: number, value: RowValues, style: string = "n"): Row {
     this.spliceRows(pos, 0, value);
     this._setStyleOption(pos, style);
     return this.getRow(pos);
   }
 
-  insertRows(pos: number, values: any[], style: string = "n"): Row[] | undefined {
+  /**
+   * Insert multiple rows at position (shifting down all rows from position)
+   * by providing an array of arrays or key-value pairs
+   */
+  insertRows(pos: number, values: RowValues[], style: string = "n"): Row[] | undefined {
     this.spliceRows(pos, 0, ...values);
     if (style !== "n") {
       // copy over the styles
@@ -618,6 +686,9 @@ class Worksheet {
     rDst.height = rSrc.height;
   }
 
+  /**
+   * Duplicate rows and insert new rows
+   */
   duplicateRow(rowNum: number, count: number, insert: boolean = false): void {
     // create count duplicates of rowNum
     // either inserting new or overwriting existing rows
@@ -637,6 +708,12 @@ class Worksheet {
     }
   }
 
+  /**
+   * Cut one or more rows (rows below are shifted up)
+   * and optionally insert more
+   *
+   * Known Issue: If a splice causes any merged cells to move, the results may be unpredictable
+   */
   spliceRows(start: number, count: number, ...inserts: RowValues[]): void {
     // same problem as row.splice, except worse.
     const nKeep = start + count;
@@ -702,29 +779,43 @@ class Worksheet {
     this.workbook.definedNames.spliceRows(this.name, start, count, nInserts);
   }
 
-  // iterate over every row in the worksheet, including maybe empty rows
-  eachRow(iteratee: (row: any, rowNumber: number) => void): void;
-  eachRow(options: EachRowOptions, iteratee: (row: any, rowNumber: number) => void): void;
-  eachRow(options: any, iteratee?: (row: any, rowNumber: number) => void): void {
-    if (!iteratee) {
-      iteratee = options;
-      options = undefined;
+  /**
+   * Iterate over all rows that have values in a worksheet
+   */
+  eachRow(callback: (row: Row, rowNumber: number) => void): void;
+  /**
+   * Iterate over all rows (including empty rows) in a worksheet
+   */
+  eachRow(opt: { includeEmpty?: boolean }, callback: (row: Row, rowNumber: number) => void): void;
+  eachRow(
+    optOrCallback: { includeEmpty?: boolean } | ((row: Row, rowNumber: number) => void),
+    maybeCallback?: (row: Row, rowNumber: number) => void
+  ): void {
+    let options: { includeEmpty?: boolean } | undefined;
+    let callback: (row: Row, rowNumber: number) => void;
+    if (typeof optOrCallback === "function") {
+      callback = optOrCallback;
+    } else {
+      options = optOrCallback;
+      callback = maybeCallback!;
     }
     if (options && options.includeEmpty) {
       const n = this._rows.length;
       for (let i = 1; i <= n; i++) {
-        iteratee(this.getRow(i), i);
+        callback(this.getRow(i), i);
       }
     } else {
       this._rows.forEach(row => {
         if (row && row.hasValues) {
-          iteratee(row, row.number);
+          callback(row, row.number);
         }
       });
     }
   }
 
-  // return all rows as sparse array
+  /**
+   * Return all rows as sparse array
+   */
   getSheetValues(): CellValue[][] {
     const rows: CellValue[][] = [];
     this._rows.forEach(row => {
@@ -738,14 +829,18 @@ class Worksheet {
   // =========================================================================
   // Cells
 
-  // returns the cell at [r,c] or address given by r. If not found, return undefined
+  /**
+   * Returns the cell at [r,c] or address given by r. If not found, return undefined
+   */
   findCell(r: number | string, c?: number): Cell | undefined {
     const address = colCache.getAddress(r, c);
     const row = this._rows[address.row - 1];
     return row ? row.findCell(address.col) : undefined;
   }
 
-  // return the cell at [r,c] or address given by r. If not found, create a new one.
+  /**
+   * Get or create cell at [r,c] or address given by r
+   */
   getCell(r: number | string, c?: number): Cell {
     const address = colCache.getAddress(r, c);
     const row = this.getRow(address.row);
@@ -755,7 +850,15 @@ class Worksheet {
   // =========================================================================
   // Merge
 
-  // convert the range defined by ['tl:br'], [tl,br] or [t,l,b,r] into a single 'merged' cell
+  /**
+   * Merge cells, either:
+   *
+   * tlbr string, e.g. `'A4:B5'`
+   *
+   * tl string, br string, e.g. `'G10', 'H11'`
+   *
+   * t, l, b, r numbers, e.g. `10,11,12,13`
+   */
   mergeCells(...cells: RangeInput[]): void {
     const dimensions = new Range(cells);
     this._mergeCellsInternal(dimensions);
@@ -807,9 +910,11 @@ class Worksheet {
     return Object.values(this._merges).some(Boolean);
   }
 
-  // scan the range defined by ['tl:br'], [tl,br] or [t,l,b,r] and if any cell is part of a merge,
-  // un-merge the group. Note this function can affect multiple merges and merge-blocks are
-  // atomic - either they're all merged or all un-merged.
+  /**
+   * Scan the range and if any cell is part of a merge, un-merge the group.
+   * Note this function can affect multiple merges and merge-blocks are
+   * atomic - either they're all merged or all un-merged.
+   */
   unMergeCells(...cells: RangeInput[]): void {
     const dimensions = new Range(cells);
 
@@ -890,6 +995,11 @@ class Worksheet {
 
   // =========================================================================
   // Images
+
+  /**
+   * Using the image id from `Workbook.addImage`,
+   * embed an image within the worksheet to cover a range
+   */
   addImage(imageId: string | number, range: AddImageRange): void {
     const model = {
       type: "image",
@@ -903,6 +1013,9 @@ class Worksheet {
     return this._media.filter(m => m.type === "image");
   }
 
+  /**
+   * Using the image id from `Workbook.addImage`, set the background to the worksheet
+   */
   addBackgroundImage(imageId: string | number): void {
     const model = {
       type: "background",
@@ -918,6 +1031,10 @@ class Worksheet {
 
   // =========================================================================
   // Worksheet Protection
+
+  /**
+   * Protect the worksheet with optional password and options
+   */
   protect(password?: string, options?: Partial<SheetProtection>): Promise<void> {
     // TODO: make this function truly async
     // perhaps marshal to worker thread or something
@@ -959,20 +1076,33 @@ class Worksheet {
 
   // =========================================================================
   // Tables
+
+  /**
+   * Add a new table and return a reference to it
+   */
   addTable(model: TableProperties): Table {
     const table = new Table(this, model);
     this.tables[model.name] = table;
     return table;
   }
 
+  /**
+   * Fetch table by name
+   */
   getTable(name: string): Table {
     return this.tables[name];
   }
 
+  /**
+   * Delete table by name
+   */
   removeTable(name: string): void {
     delete this.tables[name];
   }
 
+  /**
+   * Fetch all tables in the worksheet
+   */
   getTables(): Table[] {
     return Object.values(this.tables);
   }
@@ -995,10 +1125,17 @@ Please leave feedback at https://github.com/excelts/excelts/discussions/2575`
 
   // ===========================================================================
   // Conditional Formatting
+
+  /**
+   * Add conditional formatting rules
+   */
   addConditionalFormatting(cf: ConditionalFormattingOptions): void {
     this.conditionalFormattings.push(cf);
   }
 
+  /**
+   * Delete conditional formatting rules
+   */
   removeConditionalFormatting(
     filter:
       | number

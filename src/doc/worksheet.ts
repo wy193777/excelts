@@ -357,7 +357,7 @@ class Worksheet {
   // Columns
 
   // get the current columns array.
-  get columns(): Column[] | null {
+  get columns(): Column[] {
     return this._columns;
   }
 
@@ -542,7 +542,7 @@ class Worksheet {
   }
 
   // get a row by row number.
-  getRow(r: number): Row {
+  getRow(r: number): any {
     let row = this._rows[r - 1];
     if (!row) {
       row = this._rows[r - 1] = new Row(this, r);
@@ -551,18 +551,18 @@ class Worksheet {
   }
 
   // get multiple rows by row number.
-  getRows(start: number, length: number): Row[] | undefined {
+  getRows(start: number, length: number): any[] | undefined {
     if (length < 1) {
       return undefined;
     }
-    const rows: Row[] = [];
+    const rows: any[] = [];
     for (let i = start; i < start + length; i++) {
       rows.push(this.getRow(i));
     }
     return rows;
   }
 
-  addRow(value: RowValues, style: string = "n"): Row {
+  addRow(value: any, style: string = "n"): any {
     const rowNo = this._nextRow;
     const row = this.getRow(rowNo);
     row.values = value;
@@ -570,7 +570,7 @@ class Worksheet {
     return row;
   }
 
-  addRows(value: RowValues[], style: string = "n"): Row[] {
+  addRows(value: any[], style: string = "n"): any[] {
     const rows: Row[] = [];
     value.forEach(row => {
       rows.push(this.addRow(row, style));
@@ -578,13 +578,13 @@ class Worksheet {
     return rows;
   }
 
-  insertRow(pos: number, value: RowValues, style: string = "n"): Row {
+  insertRow(pos: number, value: any, style: string = "n"): any {
     this.spliceRows(pos, 0, value);
     this._setStyleOption(pos, style);
     return this.getRow(pos);
   }
 
-  insertRows(pos: number, values: RowValues[], style: string = "n"): Row[] | undefined {
+  insertRows(pos: number, values: any[], style: string = "n"): Row[] | undefined {
     this.spliceRows(pos, 0, ...values);
     if (style !== "n") {
       // copy over the styles
@@ -703,19 +703,12 @@ class Worksheet {
   }
 
   // iterate over every row in the worksheet, including maybe empty rows
-  eachRow(iteratee: (row: Row, rowNumber: number) => void): void;
-  eachRow(options: EachRowOptions, iteratee: (row: Row, rowNumber: number) => void): void;
-  eachRow(
-    optionsOrIteratee: EachRowOptions | ((row: Row, rowNumber: number) => void),
-    maybeIteratee?: (row: Row, rowNumber: number) => void
-  ): void {
-    let options: EachRowOptions | undefined;
-    let iteratee: (row: Row, rowNumber: number) => void;
-    if (typeof optionsOrIteratee === "function") {
-      iteratee = optionsOrIteratee;
-    } else {
-      options = optionsOrIteratee;
-      iteratee = maybeIteratee!;
+  eachRow(iteratee: (row: any, rowNumber: number) => void): void;
+  eachRow(options: EachRowOptions, iteratee: (row: any, rowNumber: number) => void): void;
+  eachRow(options: any, iteratee?: (row: any, rowNumber: number) => void): void {
+    if (!iteratee) {
+      iteratee = options;
+      options = undefined;
     }
     if (options && options.includeEmpty) {
       const n = this._rows.length;

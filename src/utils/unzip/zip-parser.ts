@@ -254,7 +254,7 @@ export function parseZipEntries(data: Uint8Array, options: ZipParseOptions = {})
   reader.skip(2); // disk where central dir starts
   reader.skip(2); // entries on this disk
   let totalEntries = reader.readUint16(); // total entries
-  let centralDirSize = reader.readUint32();
+  reader.skip(4); // central directory size (unused)
   let centralDirOffset = reader.readUint32();
 
   // Check for ZIP64
@@ -275,15 +275,12 @@ export function parseZipEntries(data: Uint8Array, options: ZipParseOptions = {})
       zip64Reader.skip(4); // disk number
       zip64Reader.skip(4); // disk with central dir
       const zip64TotalEntries = Number(zip64Reader.readBigUint64());
-      const zip64CentralDirSize = Number(zip64Reader.readBigUint64());
+      zip64Reader.skip(8); // central directory size (unused)
       const zip64CentralDirOffset = Number(zip64Reader.readBigUint64());
 
       // Use ZIP64 values if standard values are maxed out
       if (totalEntries === 0xffff) {
         totalEntries = zip64TotalEntries;
-      }
-      if (centralDirSize === 0xffffffff) {
-        centralDirSize = zip64CentralDirSize;
       }
       if (centralDirOffset === 0xffffffff) {
         centralDirOffset = zip64CentralDirOffset;

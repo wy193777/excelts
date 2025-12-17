@@ -34,8 +34,10 @@ class ContentTypesXform extends BaseXform {
       ContentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"
     });
 
-    model.worksheets.forEach((worksheet: any) => {
-      const name = `/xl/worksheets/sheet${worksheet.id}.xml`;
+    model.worksheets.forEach((worksheet: any, index: number) => {
+      // Use fileIndex if set, otherwise use sequential index (1-based)
+      const fileIndex = worksheet.fileIndex || index + 1;
+      const name = `/xl/worksheets/sheet${fileIndex}.xml`;
       xmlStream.leafNode("Override", {
         PartName: name,
         ContentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"

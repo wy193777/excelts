@@ -65,7 +65,18 @@ interface DataField {
   fld: number;
   baseField?: number;
   baseItem?: number;
-  subtotal?: "sum" | "count" | "average" | "max" | "min" | "product" | "countNums" | "stdDev" | "stdDevP" | "var" | "varP";
+  subtotal?:
+    | "sum"
+    | "count"
+    | "average"
+    | "max"
+    | "min"
+    | "product"
+    | "countNums"
+    | "stdDev"
+    | "stdDevP"
+    | "var"
+    | "varP";
 }
 
 interface PivotTable {

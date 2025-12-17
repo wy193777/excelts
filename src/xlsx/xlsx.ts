@@ -136,7 +136,8 @@ class XLSX {
       drawings: model.drawings,
       comments: model.comments,
       tables: model.tables,
-      vmlDrawings: model.vmlDrawings
+      vmlDrawings: model.vmlDrawings,
+      pivotTables: model.pivotTablesIndexed
     };
     model.worksheets.forEach((worksheet: any) => {
       worksheet.relationships = model.worksheetRels[worksheet.sheetNo];
@@ -170,6 +171,8 @@ class XLSX {
     if (typeof rawPivotTables !== "object" || Object.keys(rawPivotTables).length === 0) {
       // Ensure pivotTables is an empty array (not an object)
       model.pivotTables = [];
+      // Also create an empty indexed object for worksheet reconciliation
+      model.pivotTablesIndexed = {};
       return;
     }
 
@@ -204,6 +207,8 @@ class XLSX {
 
     // Process pivot tables and link to worksheets
     const loadedPivotTables: any[] = [];
+    // Create indexed object for worksheet reconciliation (keyed by relative path)
+    const pivotTablesIndexed: Record<string, any> = {};
 
     Object.entries(rawPivotTables).forEach(([pivotName, pivotTable]: [string, any]) => {
       const pt = pivotTable as ParsedPivotTableModel;
@@ -238,6 +243,8 @@ class XLSX {
       };
 
       loadedPivotTables.push(completePivotTable);
+      // Index by relative path for worksheet reconciliation
+      pivotTablesIndexed[`../pivotTables/${pivotName}.xml`] = completePivotTable;
     });
 
     // Sort by table number to maintain order
@@ -246,6 +253,9 @@ class XLSX {
     // Replace pivotTables object with the processed array
     // This is what the Workbook model setter expects
     model.pivotTables = loadedPivotTables;
+
+    // Also keep indexed version for worksheet reconciliation
+    model.pivotTablesIndexed = pivotTablesIndexed;
 
     // Also keep as loadedPivotTables for backward compatibility
     model.loadedPivotTables = loadedPivotTables;
@@ -835,12 +845,15 @@ class XLSX {
         Target: `pivotCache/pivotCacheDefinition${pivotTable.tableNumber}.xml`
       });
     });
-    model.worksheets.forEach((worksheet: any) => {
+    model.worksheets.forEach((worksheet: any, index: number) => {
+      // Use sequential index (1-based) for file naming, not worksheet.id (sheetId)
+      // sheetId can be non-sequential (e.g., 1, 3, 5) which would create gaps in filenames
       worksheet.rId = `rId${count++}`;
+      worksheet.fileIndex = index + 1; // Store for use in addWorksheets and content types
       relationships.push({
         Id: worksheet.rId,
         Type: XLSX.RelType.Worksheet,
-        Target: `worksheets/sheet${worksheet.id}.xml`
+        Target: `worksheets/sheet${worksheet.fileIndex}.xml`
       });
     });
     const xform = new RelationshipsXform();
@@ -874,25 +887,27 @@ class XLSX {
     const vmlNotesXform = new VmlNotesXform();
 
     // write sheets
-    model.worksheets.forEach((worksheet: any) => {
+    model.worksheets.forEach((worksheet: any, index: number) => {
+      // Use fileIndex if set by addWorkbookRels, otherwise use index + 1
+      const fileIndex = worksheet.fileIndex || index + 1;
       let xmlStream = new XmlStream();
       worksheetXform.render(xmlStream, worksheet);
-      zip.append(xmlStream.xml, { name: `xl/worksheets/sheet${worksheet.id}.xml` });
+      zip.append(xmlStream.xml, { name: `xl/worksheets/sheet${fileIndex}.xml` });
 
       if (worksheet.rels && worksheet.rels.length) {
         xmlStream = new XmlStream();
         relationshipsXform.render(xmlStream, worksheet.rels);
-        zip.append(xmlStream.xml, { name: `xl/worksheets/_rels/sheet${worksheet.id}.xml.rels` });
+        zip.append(xmlStream.xml, { name: `xl/worksheets/_rels/sheet${fileIndex}.xml.rels` });
       }
 
       if (worksheet.comments.length > 0) {
         xmlStream = new XmlStream();
         commentsXform.render(xmlStream, worksheet);
-        zip.append(xmlStream.xml, { name: `xl/comments${worksheet.id}.xml` });
+        zip.append(xmlStream.xml, { name: `xl/comments${fileIndex}.xml` });
 
         xmlStream = new XmlStream();
         vmlNotesXform.render(xmlStream, worksheet);
-        zip.append(xmlStream.xml, { name: `xl/drawings/vmlDrawing${worksheet.id}.vml` });
+        zip.append(xmlStream.xml, { name: `xl/drawings/vmlDrawing${fileIndex}.vml` });
       }
     });
   }

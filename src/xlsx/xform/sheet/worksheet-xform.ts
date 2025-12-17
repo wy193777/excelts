@@ -552,6 +552,18 @@ class WorkSheetXform extends BaseXform {
       return options.tables[rel.Target];
     });
 
+    // Link pivot tables from relationships to worksheet
+    // This is needed so that when writing, the worksheet knows which pivot tables it contains
+    model.pivotTables = [];
+    (model.relationships || []).forEach(rel => {
+      if (rel.Type === RelType.PivotTable && options.pivotTables) {
+        const pivotTable = options.pivotTables[rel.Target];
+        if (pivotTable) {
+          model.pivotTables.push(pivotTable);
+        }
+      }
+    });
+
     delete model.relationships;
     delete model.hyperlinks;
     delete model.comments;

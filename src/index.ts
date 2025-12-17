@@ -15,6 +15,18 @@ export * from "./doc/anchor.js";
 export { Table } from "./doc/table.js";
 export { DataValidations } from "./doc/data-validations.js";
 
+// Export pivot table types
+export type {
+  PivotTable,
+  PivotTableModel,
+  PivotTableSource,
+  CacheField,
+  DataField,
+  PivotTableSubtotal,
+  ParsedCacheDefinition,
+  ParsedCacheRecords
+} from "./doc/pivot-table.js";
+
 // Export enums
 export * from "./doc/enums.js";
 

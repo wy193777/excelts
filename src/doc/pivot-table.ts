@@ -1,4 +1,4 @@
-import { objectFromProps, range, toSortedArray } from "../utils/utils.js";
+import { range, toSortedArray } from "../utils/utils.js";
 import { colCache } from "../utils/col-cache.js";
 import type { Table } from "./table.js";
 
@@ -6,20 +6,29 @@ import type { Table } from "./table.js";
  * Interface representing the source data abstraction for pivot tables.
  * This allows both Worksheet and Table to be used as pivot table data sources.
  */
-interface PivotTableSource {
+export interface PivotTableSource {
+  /** Name of the source (worksheet name or table name) */
   name: string;
+  /** Get row values by 1-indexed row number */
   getRow(rowNumber: number): { values: any[] };
+  /** Get column values by 1-indexed column number */
   getColumn(columnNumber: number): { values: any[] };
+  /** Get all sheet values as a sparse 2D array */
   getSheetValues(): any[][];
+  /** Dimensions with short range reference (e.g., "A1:E10") */
   dimensions: { shortRange: string };
 }
 
-interface PivotTableModel {
+/**
+ * Model for creating a new pivot table.
+ * Pass this to worksheet.addPivotTable() to create a pivot table.
+ */
+export interface PivotTableModel {
   /**
    * Source worksheet for the pivot table data.
    * Either sourceSheet or sourceTable must be provided (mutually exclusive).
    */
-  sourceSheet?: any;
+  sourceSheet?: PivotTableSource;
   /**
    * Source table for the pivot table data.
    * Either sourceSheet or sourceTable must be provided (mutually exclusive).
@@ -52,41 +61,68 @@ interface PivotTableModel {
   applyWidthHeightFormats?: "0" | "1";
 }
 
-interface CacheField {
+/**
+ * Represents a cache field in a pivot table.
+ * Cache fields store unique values from source columns for row/column grouping.
+ */
+export interface CacheField {
+  /** Name of the field (column header from source) */
   name: string;
+  /** Unique values for row/column fields, null for value fields */
   sharedItems: any[] | null;
 }
 
+/** Aggregation function types for pivot table data fields */
+export type PivotTableSubtotal =
+  | "sum"
+  | "count"
+  | "average"
+  | "max"
+  | "min"
+  | "product"
+  | "countNums"
+  | "stdDev"
+  | "stdDevP"
+  | "var"
+  | "varP";
+
 /**
- * Data field configuration for pivot table aggregation
+ * Data field configuration for pivot table aggregation.
+ * Defines how values are aggregated in the pivot table.
  */
-interface DataField {
+export interface DataField {
+  /** Display name for the data field (e.g., "Sum of Sales") */
   name: string;
+  /** Index of the source field in cacheFields */
   fld: number;
+  /** Base field index for calculated fields */
   baseField?: number;
+  /** Base item index for calculated fields */
   baseItem?: number;
-  subtotal?:
-    | "sum"
-    | "count"
-    | "average"
-    | "max"
-    | "min"
-    | "product"
-    | "countNums"
-    | "stdDev"
-    | "stdDevP"
-    | "var"
-    | "varP";
+  /** Aggregation function (default: 'sum') */
+  subtotal?: PivotTableSubtotal;
 }
 
-interface PivotTable {
+/**
+ * Internal pivot table representation used by the library.
+ * This is the processed model after calling makePivotTable().
+ */
+export interface PivotTable {
+  /** Source data adapter (always present for new pivot tables) */
   source?: PivotTableSource;
+  /** Field indices for row fields */
   rows: number[];
+  /** Field indices for column fields */
   columns: number[];
+  /** Field indices for value fields */
   values: number[];
+  /** Aggregation metric */
   metric: "sum" | "count";
+  /** Cache fields with shared items */
   cacheFields: CacheField[];
+  /** Cache ID for linking to pivot cache */
   cacheId: string;
+  /** Width/height format setting */
   applyWidthHeightFormats: "0" | "1";
   /** 1-indexed table number for file naming (pivotTable1.xml, pivotTable2.xml, etc.) */
   tableNumber: number;
@@ -95,9 +131,30 @@ interface PivotTable {
   /** Data fields for loaded pivot tables */
   dataFields?: DataField[];
   /** Cache definition for loaded pivot tables */
-  cacheDefinition?: any;
+  cacheDefinition?: ParsedCacheDefinition;
   /** Cache records for loaded pivot tables */
-  cacheRecords?: any;
+  cacheRecords?: ParsedCacheRecords;
+}
+
+/**
+ * Parsed cache definition from loaded pivot table files.
+ */
+export interface ParsedCacheDefinition {
+  sourceRef?: string;
+  sourceSheet?: string;
+  cacheFields: CacheField[];
+  recordCount?: number;
+  rId?: string;
+  isLoaded?: boolean;
+}
+
+/**
+ * Parsed cache records from loaded pivot table files.
+ */
+export interface ParsedCacheRecords {
+  records: Array<Array<{ type: string; value?: any }>>;
+  count: number;
+  isLoaded?: boolean;
 }
 
 // TK(2023-10-10): turn this into a class constructor.
@@ -267,7 +324,7 @@ function makePivotTable(worksheet: any, model: PivotTableModel): PivotTable {
   };
 }
 
-function validate(worksheet: any, model: PivotTableModel, source: PivotTableSource): void {
+function validate(_worksheet: any, model: PivotTableModel, source: PivotTableSource): void {
   if (model.metric && model.metric !== "sum" && model.metric !== "count") {
     throw new Error('Only the "sum" and "count" metrics are supported at this time.');
   }
@@ -276,9 +333,10 @@ function validate(worksheet: any, model: PivotTableModel, source: PivotTableSour
 
   // Get header names from source (already resolved)
   const headerNames = source.getRow(1).values.slice(1);
-  const isInHeaderNames = objectFromProps(headerNames, true);
+  // Use Set for O(1) lookup
+  const headerNameSet = new Set(headerNames);
   for (const name of [...model.rows, ...columns, ...model.values]) {
-    if (!isInHeaderNames[name]) {
+    if (!headerNameSet.has(name)) {
       throw new Error(`The header name "${name}" was not found in ${source.name}.`);
     }
   }
@@ -305,53 +363,34 @@ function makeCacheFields(
   fieldNamesWithSharedItems: string[]
 ): CacheField[] {
   // Cache fields are used in pivot tables to reference source data.
-  //
-  // Example
-  // -------
-  // Turn
-  //
-  //  `source` sheet values [
-  //    ['A', 'B', 'C', 'D', 'E'],
-  //    ['a1', 'b1', 'c1', 4, 5],
-  //    ['a1', 'b2', 'c1', 4, 5],
-  //    ['a2', 'b1', 'c2', 14, 24],
-  //    ['a2', 'b2', 'c2', 24, 35],
-  //    ['a3', 'b1', 'c3', 34, 45],
-  //    ['a3', 'b2', 'c3', 44, 45]
-  //  ];
-  //  fieldNamesWithSharedItems = ['A', 'B', 'C'];
-  //
-  // into
-  //
-  //  [
-  //    { name: 'A', sharedItems: ['a1', 'a2', 'a3'] },
-  //    { name: 'B', sharedItems: ['b1', 'b2'] },
-  //    { name: 'C', sharedItems: ['c1', 'c2', 'c3'] },
-  //    { name: 'D', sharedItems: null },
-  //    { name: 'E', sharedItems: null }
-  //  ]
+  // Fields in fieldNamesWithSharedItems get their unique values extracted as sharedItems.
+  // Other fields (typically numeric) have sharedItems = null.
 
   const names = source.getRow(1).values;
-  const nameToHasSharedItems = objectFromProps(fieldNamesWithSharedItems, true);
+  // Use Set for O(1) lookup instead of object
+  const sharedItemsFields = new Set(fieldNamesWithSharedItems);
 
   const aggregate = (columnIndex: number): any[] => {
-    // Use slice (not splice) to avoid mutating the original array
-    const columnValues = source.getColumn(columnIndex).values.slice(2);
-    // Filter out null/undefined values - they are represented as <m /> in XML,
-    // not as sharedItems entries
-    const validValues = columnValues.filter((v: any) => v !== null && v !== undefined);
-    const columnValuesAsSet = new Set(validValues);
-    return toSortedArray(columnValuesAsSet);
+    const columnValues = source.getColumn(columnIndex).values;
+    // Build unique values set directly, skipping header (index 0,1) and null/undefined
+    const uniqueValues = new Set<any>();
+    for (let i = 2; i < columnValues.length; i++) {
+      const v = columnValues[i];
+      if (v !== null && v !== undefined) {
+        uniqueValues.add(v);
+      }
+    }
+    return toSortedArray(uniqueValues);
   };
 
-  // make result
+  // Build result array
   const result: CacheField[] = [];
   for (const columnIndex of range(1, names.length)) {
     const name = names[columnIndex];
-    const sharedItems = nameToHasSharedItems[name] ? aggregate(columnIndex) : null;
+    const sharedItems = sharedItemsFields.has(name) ? aggregate(columnIndex) : null;
     result.push({ name, sharedItems });
   }
   return result;
 }
 
-export { makePivotTable, type PivotTable, type PivotTableModel, type PivotTableSource };
+export { makePivotTable };

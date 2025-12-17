@@ -147,21 +147,17 @@ class PivotCacheRecordsXform extends BaseXform {
 
   // Helper methods for rendering new records
   private renderTableNew(sourceBodyRows: any[], cacheFields: any[]): string {
-    const rowsInXML = sourceBodyRows.map((row: any[]) => {
+    const parts: string[] = [];
+    for (const row of sourceBodyRows) {
       const realRow = row.slice(1);
-      return [...this.renderRowLinesNew(realRow, cacheFields)].join("");
-    });
-    return rowsInXML.join("");
-  }
-
-  private *renderRowLinesNew(row: any[], cacheFields: any[]): Generator<string> {
-    // PivotCache Record: http://www.datypic.com/sc/ooxml/e-ssml_r-1.html
-    yield "\n  <r>";
-    for (const [index, cellValue] of row.entries()) {
-      yield "\n    ";
-      yield this.renderCellNew(cellValue, cacheFields[index].sharedItems);
+      parts.push("\n  <r>");
+      for (let i = 0; i < realRow.length; i++) {
+        parts.push("\n    ");
+        parts.push(this.renderCellNew(realRow[i], cacheFields[i].sharedItems));
+      }
+      parts.push("\n  </r>");
     }
-    yield "\n  </r>";
+    return parts.join("");
   }
 
   private renderCellNew(value: any, sharedItems: string[] | null): string {

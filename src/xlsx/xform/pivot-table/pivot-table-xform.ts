@@ -659,16 +659,20 @@ function buildDataFields(cacheFields: any[], values: number[], metric: "sum" | "
 }
 
 function renderPivotFields(pivotTable: PivotTableModel): string {
+  // Pre-compute field type lookup for O(1) access
+  const rowSet = new Set(pivotTable.rows);
+  const colSet = new Set(pivotTable.columns);
+  const valueSet = new Set(pivotTable.values);
+
   return pivotTable.cacheFields
     .map((cacheField: any, fieldIndex: number) => {
-      const fieldType =
-        pivotTable.rows.indexOf(fieldIndex) >= 0
-          ? "row"
-          : pivotTable.columns.indexOf(fieldIndex) >= 0
-            ? "column"
-            : pivotTable.values.indexOf(fieldIndex) >= 0
-              ? "value"
-              : null;
+      const fieldType = rowSet.has(fieldIndex)
+        ? "row"
+        : colSet.has(fieldIndex)
+          ? "column"
+          : valueSet.has(fieldIndex)
+            ? "value"
+            : null;
       return renderPivotField(fieldType, cacheField.sharedItems);
     })
     .join("");

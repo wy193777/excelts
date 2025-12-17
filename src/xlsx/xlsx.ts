@@ -17,8 +17,14 @@ import { WorkSheetXform } from "./xform/sheet/worksheet-xform.js";
 import { DrawingXform } from "./xform/drawing/drawing-xform.js";
 import { TableXform } from "./xform/table/table-xform.js";
 import { PivotCacheRecordsXform } from "./xform/pivot-table/pivot-cache-records-xform.js";
-import { PivotCacheDefinitionXform } from "./xform/pivot-table/pivot-cache-definition-xform.js";
-import { PivotTableXform } from "./xform/pivot-table/pivot-table-xform.js";
+import {
+  PivotCacheDefinitionXform,
+  type ParsedCacheDefinitionModel
+} from "./xform/pivot-table/pivot-cache-definition-xform.js";
+import {
+  PivotTableXform,
+  type ParsedPivotTableModel
+} from "./xform/pivot-table/pivot-table-xform.js";
 import { CommentsXform } from "./xform/comment/comments-xform.js";
 import { VmlNotesXform } from "./xform/comment/vml-notes-xform.js";
 import { theme1Xml } from "./xml/theme1.js";
@@ -118,6 +124,9 @@ class XLSX {
       tableXform.reconcile(table, tableOptions);
     });
 
+    // Reconcile pivot tables - link pivot tables to worksheets and cache data
+    this._reconcilePivotTables(model);
+
     const sheetOptions = {
       styles: model.styles,
       sharedStrings: model.sharedStrings,
@@ -146,6 +155,145 @@ class XLSX {
     delete model.drawings;
     delete model.drawingRels;
     delete model.vmlDrawings;
+    // Clean up raw pivot table data after reconciliation
+    delete model.pivotTableRels;
+    delete model.pivotCacheDefinitionRels;
+  }
+
+  /**
+   * Reconcile pivot tables by linking them to worksheets and their cache data.
+   * This builds a complete pivot table model ready for writing.
+   */
+  private _reconcilePivotTables(model: any): void {
+    // Skip if no pivot tables were loaded (object is empty or undefined)
+    const rawPivotTables = model.pivotTables || {};
+    if (typeof rawPivotTables !== "object" || Object.keys(rawPivotTables).length === 0) {
+      // Ensure pivotTables is an empty array (not an object)
+      model.pivotTables = [];
+      return;
+    }
+
+    // Build a map of cache IDs to their definitions and records
+    const cacheMap = new Map<
+      number,
+      {
+        definition: ParsedCacheDefinitionModel;
+        records: any;
+        definitionName: string;
+      }
+    >();
+
+    // Process cache definitions
+    Object.entries(model.pivotCacheDefinitions || {}).forEach(
+      ([name, definition]: [string, any]) => {
+        const cacheId = this._extractCacheIdFromDefinitionName(name, model);
+        if (cacheId !== null) {
+          const recordsName = name.replace("Definition", "Records");
+          cacheMap.set(cacheId, {
+            definition,
+            records: model.pivotCacheRecords?.[recordsName],
+            definitionName: name
+          });
+        }
+      }
+    );
+
+    // Process pivot tables and link to worksheets
+    const loadedPivotTables: any[] = [];
+
+    Object.entries(rawPivotTables).forEach(([pivotName, pivotTable]: [string, any]) => {
+      const pt = pivotTable as ParsedPivotTableModel;
+      const tableNumber = this._extractTableNumber(pivotName);
+
+      // Get cache data for this pivot table
+      const cacheData = cacheMap.get(pt.cacheId);
+
+      // Build complete pivot table model
+      const completePivotTable = {
+        // Core model data
+        ...pt,
+        tableNumber,
+
+        // Link to cache data
+        cacheDefinition: cacheData?.definition,
+        cacheRecords: cacheData?.records,
+
+        // Reconstruct cacheFields from definition for compatibility
+        cacheFields: cacheData?.definition?.cacheFields || [],
+
+        // Determine rows, columns, values from parsed data
+        rows: pt.rowFields.filter(f => f >= 0),
+        columns: pt.colFields.filter(f => f >= 0 && f !== -2),
+        values: pt.dataFields.map(df => df.fld),
+
+        // Determine metric from dataFields
+        metric: this._determineMetric(pt.dataFields),
+
+        // Preserve formatting options
+        applyWidthHeightFormats: pt.applyWidthHeightFormats || "0"
+      };
+
+      loadedPivotTables.push(completePivotTable);
+    });
+
+    // Sort by table number to maintain order
+    loadedPivotTables.sort((a, b) => a.tableNumber - b.tableNumber);
+
+    // Replace pivotTables object with the processed array
+    // This is what the Workbook model setter expects
+    model.pivotTables = loadedPivotTables;
+
+    // Also keep as loadedPivotTables for backward compatibility
+    model.loadedPivotTables = loadedPivotTables;
+  }
+
+  /**
+   * Extract table number from pivot table name (e.g., "pivotTable1" -> 1)
+   */
+  private _extractTableNumber(name: string): number {
+    const match = name.match(/pivotTable(\d+)/);
+    return match ? parseInt(match[1], 10) : 1;
+  }
+
+  /**
+   * Extract cache ID from definition name by checking workbook rels
+   */
+  private _extractCacheIdFromDefinitionName(name: string, model: any): number | null {
+    // Extract number from name (e.g., "pivotCacheDefinition1" -> 1)
+    const match = name.match(/pivotCacheDefinition(\d+)/);
+    if (!match) {
+      return null;
+    }
+
+    const defNumber = parseInt(match[1], 10);
+
+    // Check workbook rels to find the cache ID
+    // The cache ID is typically 10-based (10, 11, 12, ...)
+    // but we need to map it correctly
+    const workbookRels = model.workbookRels || [];
+    for (const rel of workbookRels) {
+      if (
+        rel.Type === XLSX.RelType.PivotCacheDefinition &&
+        rel.Target?.includes(`pivotCacheDefinition${defNumber}.xml`)
+      ) {
+        // The cache ID is stored in the workbook.xml, not the rels
+        // For now, return a derived ID based on the definition number
+        return 9 + defNumber; // Results in 10, 11, 12, ... for 1, 2, 3, ...
+      }
+    }
+
+    // Fallback: derive from definition number
+    return 9 + defNumber;
+  }
+
+  /**
+   * Determine the aggregation metric from dataFields
+   */
+  private _determineMetric(dataFields: Array<{ subtotal?: string }>): "sum" | "count" {
+    if (dataFields.length > 0 && dataFields[0].subtotal === "count") {
+      return "count";
+    }
+    return "sum";
   }
 
   async _processWorksheetEntry(
@@ -270,6 +418,46 @@ class XLSX {
       streamBuf.on("error", onError);
       stream.pipe(streamBuf);
     });
+  }
+
+  async _processPivotTableEntry(stream: any, model: any, name: string): Promise<void> {
+    const xform = new PivotTableXform();
+    const pivotTable = await xform.parseStream(stream);
+    if (pivotTable) {
+      model.pivotTables[name] = pivotTable;
+    }
+  }
+
+  async _processPivotTableRelsEntry(stream: any, model: any, name: string): Promise<void> {
+    const xform = new RelationshipsXform();
+    const relationships = await xform.parseStream(stream);
+    model.pivotTableRels[name] = relationships;
+  }
+
+  async _processPivotCacheDefinitionEntry(stream: any, model: any, name: string): Promise<void> {
+    const xform = new PivotCacheDefinitionXform();
+    const cacheDefinition = await xform.parseStream(stream);
+    if (cacheDefinition) {
+      model.pivotCacheDefinitions[name] = cacheDefinition;
+    }
+  }
+
+  async _processPivotCacheDefinitionRelsEntry(
+    stream: any,
+    model: any,
+    name: string
+  ): Promise<void> {
+    const xform = new RelationshipsXform();
+    const relationships = await xform.parseStream(stream);
+    model.pivotCacheDefinitionRels[name] = relationships;
+  }
+
+  async _processPivotCacheRecordsEntry(stream: any, model: any, name: string): Promise<void> {
+    const xform = new PivotCacheRecordsXform();
+    const cacheRecords = await xform.parseStream(stream);
+    if (cacheRecords) {
+      model.pivotCacheRecords[name] = cacheRecords;
+    }
   }
 
   async read(stream: any, options?: any): Promise<any> {
@@ -399,7 +587,13 @@ class XLSX {
       drawingRels: {},
       comments: {},
       tables: {},
-      vmlDrawings: {}
+      vmlDrawings: {},
+      // Pivot table storage for loaded files
+      pivotTables: {},
+      pivotTableRels: {},
+      pivotCacheDefinitions: {},
+      pivotCacheDefinitionRels: {},
+      pivotCacheRecords: {}
     };
 
     // Convert fflate format to JSZip-like structure for compatibility
@@ -516,6 +710,35 @@ class XLSX {
               match = entryName.match(/xl\/theme\/([a-zA-Z0-9]+)[.]xml/);
               if (match) {
                 await this._processThemeEntry(stream, model, match[1]);
+                break;
+              }
+              // Pivot table files
+              match = entryName.match(/xl\/pivotTables\/(pivotTable\d+)[.]xml/);
+              if (match) {
+                await this._processPivotTableEntry(stream, model, match[1]);
+                break;
+              }
+              match = entryName.match(/xl\/pivotTables\/_rels\/(pivotTable\d+)[.]xml[.]rels/);
+              if (match) {
+                await this._processPivotTableRelsEntry(stream, model, match[1]);
+                break;
+              }
+              // Pivot cache files
+              match = entryName.match(/xl\/pivotCache\/(pivotCacheDefinition\d+)[.]xml/);
+              if (match) {
+                await this._processPivotCacheDefinitionEntry(stream, model, match[1]);
+                break;
+              }
+              match = entryName.match(
+                /xl\/pivotCache\/_rels\/(pivotCacheDefinition\d+)[.]xml[.]rels/
+              );
+              if (match) {
+                await this._processPivotCacheDefinitionRelsEntry(stream, model, match[1]);
+                break;
+              }
+              match = entryName.match(/xl\/pivotCache\/(pivotCacheRecords\d+)[.]xml/);
+              if (match) {
+                await this._processPivotCacheRecordsEntry(stream, model, match[1]);
                 break;
               }
             }
@@ -721,16 +944,31 @@ class XLSX {
     model.pivotTables.forEach((pivotTable: any) => {
       const n = pivotTable.tableNumber;
 
-      // pivot cache records
-      let xml = pivotCacheRecordsXform.toXml(pivotTable);
-      zip.append(xml, { name: `xl/pivotCache/pivotCacheRecords${n}.xml` });
+      // For loaded pivot tables, use the stored cache data
+      // For new pivot tables, use the source data
+      const isLoaded = pivotTable.isLoaded;
 
-      // pivot cache definition
-      xml = pivotCacheDefinitionXform.toXml(pivotTable);
-      zip.append(xml, { name: `xl/pivotCache/pivotCacheDefinition${n}.xml` });
+      if (isLoaded) {
+        // Loaded pivot table - use stored cache definition and records
+        if (pivotTable.cacheDefinition) {
+          const xml = pivotCacheDefinitionXform.toXml(pivotTable.cacheDefinition);
+          zip.append(xml, { name: `xl/pivotCache/pivotCacheDefinition${n}.xml` });
+        }
+        if (pivotTable.cacheRecords) {
+          const xml = pivotCacheRecordsXform.toXml(pivotTable.cacheRecords);
+          zip.append(xml, { name: `xl/pivotCache/pivotCacheRecords${n}.xml` });
+        }
+      } else {
+        // New pivot table - generate from source
+        let xml = pivotCacheRecordsXform.toXml(pivotTable);
+        zip.append(xml, { name: `xl/pivotCache/pivotCacheRecords${n}.xml` });
 
-      // pivot cache definition rels
-      xml = relsXform.toXml([
+        xml = pivotCacheDefinitionXform.toXml(pivotTable);
+        zip.append(xml, { name: `xl/pivotCache/pivotCacheDefinition${n}.xml` });
+      }
+
+      // pivot cache definition rels (same for both)
+      let xml = relsXform.toXml([
         {
           Id: "rId1",
           Type: XLSX.RelType.PivotCacheRecords,

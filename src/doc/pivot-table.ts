@@ -57,8 +57,19 @@ interface CacheField {
   sharedItems: any[] | null;
 }
 
+/**
+ * Data field configuration for pivot table aggregation
+ */
+interface DataField {
+  name: string;
+  fld: number;
+  baseField?: number;
+  baseItem?: number;
+  subtotal?: "sum" | "count" | "average" | "max" | "min" | "product" | "countNums" | "stdDev" | "stdDevP" | "var" | "varP";
+}
+
 interface PivotTable {
-  source: PivotTableSource;
+  source?: PivotTableSource;
   rows: number[];
   columns: number[];
   values: number[];
@@ -68,6 +79,14 @@ interface PivotTable {
   applyWidthHeightFormats: "0" | "1";
   /** 1-indexed table number for file naming (pivotTable1.xml, pivotTable2.xml, etc.) */
   tableNumber: number;
+  /** Flag indicating this pivot table was loaded from file (not newly created) */
+  isLoaded?: boolean;
+  /** Data fields for loaded pivot tables */
+  dataFields?: DataField[];
+  /** Cache definition for loaded pivot tables */
+  cacheDefinition?: any;
+  /** Cache records for loaded pivot tables */
+  cacheRecords?: any;
 }
 
 // TK(2023-10-10): turn this into a class constructor.

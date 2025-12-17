@@ -694,5 +694,278 @@ describe("Workbook", () => {
         });
       }).toThrow('Only the "sum" and "count" metrics are supported at this time.');
     });
+
+    // ==========================================================================
+    // Pivot Table Read and Preserve Tests (Issue #261)
+    // ==========================================================================
+
+    describe("Pivot Table Preservation (Load/Save)", () => {
+      const ROUNDTRIP_FILEPATH = testFilePath("workbook-pivot-roundtrip.test");
+
+      it("preserves pivot table through load/save cycle", async () => {
+        // Step 1: Create workbook with pivot table
+        const workbook = new Workbook();
+        const worksheet1 = workbook.addWorksheet("Sheet1");
+        worksheet1.addRows(TEST_DATA);
+
+        const worksheet2 = workbook.addWorksheet("Sheet2");
+        worksheet2.addPivotTable({
+          sourceSheet: worksheet1,
+          rows: ["A", "B"],
+          columns: ["C"],
+          values: ["E"],
+          metric: "sum"
+        });
+
+        // Step 2: Save to file
+        await workbook.xlsx.writeFile(ROUNDTRIP_FILEPATH);
+
+        // Step 3: Read the file back
+        const loadedWorkbook = new Workbook();
+        await loadedWorkbook.xlsx.readFile(ROUNDTRIP_FILEPATH);
+
+        // Step 4: Check that loaded workbook has pivot tables
+        expect(loadedWorkbook.pivotTables.length).toBe(1);
+        const loadedPivot = loadedWorkbook.pivotTables[0];
+        expect(loadedPivot).toBeDefined();
+        expect(loadedPivot.isLoaded).toBe(true);
+        expect(loadedPivot.tableNumber).toBe(1);
+
+        // Step 5: Save again
+        const ROUNDTRIP_FILEPATH2 = testFilePath("workbook-pivot-roundtrip2.test");
+        await loadedWorkbook.xlsx.writeFile(ROUNDTRIP_FILEPATH2);
+
+        // Step 6: Verify pivot table files are present in the saved file
+        const buffer = await fsReadFileAsync(ROUNDTRIP_FILEPATH2);
+        const zipData = unzipSync(new Uint8Array(buffer));
+        for (const filepath of PIVOT_TABLE_FILEPATHS) {
+          expect(zipData[filepath]).toBeDefined();
+        }
+      });
+
+      it("preserves multiple pivot tables through load/save cycle", async () => {
+        // Step 1: Create workbook with multiple pivot tables
+        const workbook = new Workbook();
+        const sourceSheet = workbook.addWorksheet("Source");
+        sourceSheet.addRows(TEST_DATA);
+
+        const pivotSheet = workbook.addWorksheet("Pivots");
+
+        // Add two pivot tables
+        pivotSheet.addPivotTable({
+          sourceSheet: sourceSheet,
+          rows: ["A"],
+          columns: ["C"],
+          values: ["D"],
+          metric: "sum"
+        });
+
+        pivotSheet.addPivotTable({
+          sourceSheet: sourceSheet,
+          rows: ["B"],
+          columns: ["C"],
+          values: ["E"],
+          metric: "count"
+        });
+
+        expect(workbook.pivotTables.length).toBe(2);
+
+        // Step 2: Save
+        const MULTI_PIVOT_PATH = testFilePath("workbook-multi-pivot-roundtrip.test");
+        await workbook.xlsx.writeFile(MULTI_PIVOT_PATH);
+
+        // Step 3: Load
+        const loadedWorkbook = new Workbook();
+        await loadedWorkbook.xlsx.readFile(MULTI_PIVOT_PATH);
+
+        // Step 4: Verify both pivot tables are loaded
+        expect(loadedWorkbook.pivotTables.length).toBe(2);
+
+        // Step 5: Save again
+        const MULTI_PIVOT_PATH2 = testFilePath("workbook-multi-pivot-roundtrip2.test");
+        await loadedWorkbook.xlsx.writeFile(MULTI_PIVOT_PATH2);
+
+        // Step 6: Verify both pivot tables files exist
+        const buffer = await fsReadFileAsync(MULTI_PIVOT_PATH2);
+        const zipData = unzipSync(new Uint8Array(buffer));
+
+        // Both pivot tables should have their files
+        expect(zipData["xl/pivotTables/pivotTable1.xml"]).toBeDefined();
+        expect(zipData["xl/pivotTables/pivotTable2.xml"]).toBeDefined();
+        expect(zipData["xl/pivotCache/pivotCacheDefinition1.xml"]).toBeDefined();
+        expect(zipData["xl/pivotCache/pivotCacheDefinition2.xml"]).toBeDefined();
+      });
+
+      it("preserves pivot table cache fields correctly", async () => {
+        // Create workbook with specific data
+        const workbook = new Workbook();
+        const worksheet1 = workbook.addWorksheet("Data");
+        worksheet1.addRows([
+          ["Category", "Value"],
+          ["Alpha", 100],
+          ["Beta", 200],
+          ["Alpha", 150]
+        ]);
+
+        const worksheet2 = workbook.addWorksheet("Pivot");
+        worksheet2.addPivotTable({
+          sourceSheet: worksheet1,
+          rows: ["Category"],
+          columns: [],
+          values: ["Value"],
+          metric: "sum"
+        });
+
+        const CACHE_FILEPATH = testFilePath("workbook-pivot-cache.test");
+        await workbook.xlsx.writeFile(CACHE_FILEPATH);
+
+        // Load and verify cache fields
+        const loadedWorkbook = new Workbook();
+        await loadedWorkbook.xlsx.readFile(CACHE_FILEPATH);
+
+        expect(loadedWorkbook.pivotTables.length).toBe(1);
+        const pivot = loadedWorkbook.pivotTables[0];
+        expect(pivot.cacheFields).toBeDefined();
+        expect(pivot.cacheFields.length).toBe(2);
+        expect(pivot.cacheFields[0].name).toBe("Category");
+        expect(pivot.cacheFields[1].name).toBe("Value");
+      });
+
+      it("preserves pivot table data fields correctly", async () => {
+        const workbook = new Workbook();
+        const worksheet1 = workbook.addWorksheet("Data");
+        worksheet1.addRows(TEST_DATA);
+
+        const worksheet2 = workbook.addWorksheet("Pivot");
+        worksheet2.addPivotTable({
+          sourceSheet: worksheet1,
+          rows: ["A"],
+          columns: [],
+          values: ["D", "E"], // Multiple values
+          metric: "sum"
+        });
+
+        const DATAFIELD_FILEPATH = testFilePath("workbook-pivot-datafields.test");
+        await workbook.xlsx.writeFile(DATAFIELD_FILEPATH);
+
+        // Load and verify data fields
+        const loadedWorkbook = new Workbook();
+        await loadedWorkbook.xlsx.readFile(DATAFIELD_FILEPATH);
+
+        const pivot = loadedWorkbook.pivotTables[0];
+        expect(pivot.dataFields).toBeDefined();
+        expect(pivot.dataFields.length).toBe(2);
+        expect(pivot.dataFields[0].name).toContain("D");
+        expect(pivot.dataFields[1].name).toContain("E");
+      });
+
+      it("preserves count metric through load/save", async () => {
+        const workbook = new Workbook();
+        const worksheet1 = workbook.addWorksheet("Data");
+        worksheet1.addRows(TEST_DATA);
+
+        const worksheet2 = workbook.addWorksheet("Pivot");
+        worksheet2.addPivotTable({
+          sourceSheet: worksheet1,
+          rows: ["A"],
+          columns: [],
+          values: ["D"],
+          metric: "count"
+        });
+
+        const COUNT_FILEPATH = testFilePath("workbook-pivot-count.test");
+        await workbook.xlsx.writeFile(COUNT_FILEPATH);
+
+        // Load and verify metric
+        const loadedWorkbook = new Workbook();
+        await loadedWorkbook.xlsx.readFile(COUNT_FILEPATH);
+
+        const pivot = loadedWorkbook.pivotTables[0];
+        expect(pivot.metric).toBe("count");
+      });
+
+      it("preserves applyWidthHeightFormats option", async () => {
+        const workbook = new Workbook();
+        const worksheet1 = workbook.addWorksheet("Data");
+        worksheet1.addRows(TEST_DATA);
+
+        const worksheet2 = workbook.addWorksheet("Pivot");
+        worksheet2.addPivotTable({
+          sourceSheet: worksheet1,
+          rows: ["A"],
+          columns: ["C"],
+          values: ["D"],
+          applyWidthHeightFormats: "0" // Preserve column widths
+        });
+
+        const FORMATS_FILEPATH = testFilePath("workbook-pivot-formats.test");
+        await workbook.xlsx.writeFile(FORMATS_FILEPATH);
+
+        // Load and verify
+        const loadedWorkbook = new Workbook();
+        await loadedWorkbook.xlsx.readFile(FORMATS_FILEPATH);
+
+        const pivot = loadedWorkbook.pivotTables[0];
+        expect(pivot.applyWidthHeightFormats).toBe("0");
+      });
+
+      it("preserves XML special characters in cache field names", async () => {
+        const workbook = new Workbook();
+        const worksheet1 = workbook.addWorksheet("Data");
+        worksheet1.addRows([
+          ["Name<>", "Value&"],
+          ["Test'1", 100],
+          ['Test"2', 200]
+        ]);
+
+        const worksheet2 = workbook.addWorksheet("Pivot");
+        worksheet2.addPivotTable({
+          sourceSheet: worksheet1,
+          rows: ["Name<>"],
+          columns: [],
+          values: ["Value&"],
+          metric: "sum"
+        });
+
+        const SPECIAL_CHARS_FILEPATH = testFilePath("workbook-pivot-special-chars.test");
+        await workbook.xlsx.writeFile(SPECIAL_CHARS_FILEPATH);
+
+        // Load and verify special characters are preserved
+        const loadedWorkbook = new Workbook();
+        await loadedWorkbook.xlsx.readFile(SPECIAL_CHARS_FILEPATH);
+
+        const pivot = loadedWorkbook.pivotTables[0];
+        expect(pivot.cacheFields[0].name).toBe("Name<>");
+        expect(pivot.cacheFields[1].name).toBe("Value&");
+      });
+
+      it("handles pivot table with shared items", async () => {
+        const workbook = new Workbook();
+        const worksheet1 = workbook.addWorksheet("Data");
+        worksheet1.addRows(TEST_DATA);
+
+        const worksheet2 = workbook.addWorksheet("Pivot");
+        worksheet2.addPivotTable({
+          sourceSheet: worksheet1,
+          rows: ["A", "B"], // These columns will have shared items
+          columns: ["C"],
+          values: ["E"],
+          metric: "sum"
+        });
+
+        const SHARED_ITEMS_FILEPATH = testFilePath("workbook-pivot-shared-items.test");
+        await workbook.xlsx.writeFile(SHARED_ITEMS_FILEPATH);
+
+        const loadedWorkbook = new Workbook();
+        await loadedWorkbook.xlsx.readFile(SHARED_ITEMS_FILEPATH);
+
+        const pivot = loadedWorkbook.pivotTables[0];
+        // Check that row fields have shared items
+        expect(pivot.cacheFields[0].sharedItems).toBeDefined();
+        expect(pivot.cacheFields[0].sharedItems).toContain("a1");
+        expect(pivot.cacheFields[1].sharedItems).toBeDefined();
+        expect(pivot.cacheFields[1].sharedItems).toContain("b1");
+      });
+    });
   });
 });

@@ -1,8 +1,11 @@
 import { v4 as uuidv4 } from "uuid";
 import { XmlStream } from "../../../utils/xml-stream.js";
-import { xmlEncode } from "../../../utils/utils.js";
+import { xmlEncode, xmlDecode } from "../../../utils/utils.js";
 import { BaseXform } from "../base-xform.js";
 
+/**
+ * Model for generating pivot table (with live source)
+ */
 interface PivotTableModel {
   rows: number[];
   columns: number[];
@@ -13,17 +16,133 @@ interface PivotTableModel {
   applyWidthHeightFormats: "0" | "1";
 }
 
+/**
+ * Parsed pivot field
+ */
+interface ParsedPivotField {
+  axis?: "axisRow" | "axisCol" | "axisPage" | "axisValues";
+  dataField?: boolean;
+  items?: number[];
+  compact?: boolean;
+  outline?: boolean;
+  showAll?: boolean;
+  defaultSubtotal?: boolean;
+}
+
+/**
+ * Parsed data field
+ */
+interface ParsedDataField {
+  name: string;
+  fld: number;
+  baseField?: number;
+  baseItem?: number;
+  subtotal?:
+    | "sum"
+    | "count"
+    | "average"
+    | "max"
+    | "min"
+    | "product"
+    | "countNums"
+    | "stdDev"
+    | "stdDevP"
+    | "var"
+    | "varP";
+}
+
+/**
+ * Parsed pivot table model (loaded from file)
+ */
+interface ParsedPivotTableModel {
+  // Core identifiers
+  name?: string;
+  cacheId: number;
+  uid?: string;
+
+  // Location info
+  location?: {
+    ref: string;
+    firstHeaderRow?: number;
+    firstDataRow?: number;
+    firstDataCol?: number;
+  };
+
+  // Field configurations
+  pivotFields: ParsedPivotField[];
+  rowFields: number[]; // Field indices for rows
+  colFields: number[]; // Field indices for columns
+  dataFields: ParsedDataField[];
+
+  // Style and formatting
+  applyNumberFormats?: string;
+  applyBorderFormats?: string;
+  applyFontFormats?: string;
+  applyPatternFormats?: string;
+  applyAlignmentFormats?: string;
+  applyWidthHeightFormats?: string;
+  dataCaption?: string;
+  styleName?: string;
+
+  // Version info
+  updatedVersion?: string;
+  minRefreshableVersion?: string;
+  createdVersion?: string;
+
+  // Other attributes
+  useAutoFormatting?: boolean;
+  itemPrintTitles?: boolean;
+  indent?: number;
+  compact?: boolean;
+  compactData?: boolean;
+  multipleFieldFilters?: boolean;
+
+  // Row/col items (for grand totals etc)
+  rowItems?: any[];
+  colItems?: any[];
+
+  // Flag indicating this was loaded from file
+  isLoaded?: boolean;
+
+  // Extended attributes to preserve any custom extensions
+  extensions?: any[];
+}
+
 class PivotTableXform extends BaseXform {
   declare public map: { [key: string]: any };
+  declare public model: ParsedPivotTableModel | null;
+
+  // Parser state
+  private inPivotFields: boolean;
+  private inRowFields: boolean;
+  private inColFields: boolean;
+  private inDataFields: boolean;
+  private inRowItems: boolean;
+  private inColItems: boolean;
+  private inLocation: boolean;
+  private currentPivotField: ParsedPivotField | null;
+  private inItems: boolean;
+  private inPivotTableStyleInfo: boolean;
 
   constructor() {
     super();
 
     this.map = {};
+    this.model = null;
+    this.inPivotFields = false;
+    this.inRowFields = false;
+    this.inColFields = false;
+    this.inDataFields = false;
+    this.inRowItems = false;
+    this.inColItems = false;
+    this.inLocation = false;
+    this.currentPivotField = null;
+    this.inItems = false;
+    this.inPivotTableStyleInfo = false;
   }
 
   prepare(_model: any): void {
-    // TK
+    // No preparation needed
   }
 
   get tag(): string {
@@ -31,17 +150,39 @@ class PivotTableXform extends BaseXform {
     return "pivotTableDefinition";
   }
 
-  render(xmlStream: any, model: PivotTableModel): void {
-    const { rows, columns, values, cacheFields, cacheId, applyWidthHeightFormats } = model;
+  reset(): void {
+    this.model = null;
+    this.inPivotFields = false;
+    this.inRowFields = false;
+    this.inColFields = false;
+    this.inDataFields = false;
+    this.inRowItems = false;
+    this.inColItems = false;
+    this.inLocation = false;
+    this.currentPivotField = null;
+    this.inItems = false;
+    this.inPivotTableStyleInfo = false;
+  }
 
-    // Examples
-    // --------
-    // rows: [0, 1], // only 2 items possible for now
-    // columns: [2], // only 1 item possible for now
-    // values: [4], // only 1 item possible for now
-    // metric: 'sum', // only 'sum' possible for now
-    //
-    // the numbers are indices into `cacheFields`.
+  /**
+   * Render pivot table XML.
+   * Supports both newly created models and loaded models.
+   */
+  render(xmlStream: any, model: PivotTableModel | ParsedPivotTableModel): void {
+    const isLoaded = (model as ParsedPivotTableModel).isLoaded;
+
+    if (isLoaded) {
+      this.renderLoaded(xmlStream, model as ParsedPivotTableModel);
+    } else {
+      this.renderNew(xmlStream, model as PivotTableModel);
+    }
+  }
+
+  /**
+   * Render newly created pivot table
+   */
+  private renderNew(xmlStream: any, model: PivotTableModel): void {
+    const { rows, columns, values, cacheFields, cacheId, applyWidthHeightFormats } = model;
 
     // Generate unique UID for each pivot table to prevent Excel treating them as identical
     const uniqueUid = `{${uuidv4().toUpperCase()}}`;
@@ -70,14 +211,6 @@ class PivotTableXform extends BaseXform {
       multipleFieldFilters: "0"
     });
 
-    // Note: keeping this pretty-printed and verbose for now to ease debugging.
-    //
-    // location: ref="A3:E15"
-    // pivotFields
-    // rowFields and rowItems
-    // colFields and colItems
-    // dataFields
-    // pivotTableStyleInfo
     xmlStream.writeXml(`
       <location ref="A3:E15" firstHeaderRow="1" firstDataRow="2" firstDataCol="1" />
       <pivotFields count="${cacheFields.length}">
@@ -135,22 +268,363 @@ class PivotTableXform extends BaseXform {
     xmlStream.closeNode();
   }
 
-  parseOpen(_node: any): boolean {
-    // TK
-    return false;
+  /**
+   * Render loaded pivot table (preserving original structure)
+   */
+  private renderLoaded(xmlStream: any, model: ParsedPivotTableModel): void {
+    const uniqueUid = model.uid || `{${uuidv4().toUpperCase()}}`;
+
+    xmlStream.openXml(XmlStream.StdDocAttributes);
+    xmlStream.openNode(this.tag, {
+      ...PivotTableXform.PIVOT_TABLE_ATTRIBUTES,
+      "xr:uid": uniqueUid,
+      name: model.name || "PivotTable1",
+      cacheId: model.cacheId,
+      applyNumberFormats: model.applyNumberFormats || "0",
+      applyBorderFormats: model.applyBorderFormats || "0",
+      applyFontFormats: model.applyFontFormats || "0",
+      applyPatternFormats: model.applyPatternFormats || "0",
+      applyAlignmentFormats: model.applyAlignmentFormats || "0",
+      applyWidthHeightFormats: model.applyWidthHeightFormats || "0",
+      dataCaption: model.dataCaption || "Values",
+      updatedVersion: model.updatedVersion || "8",
+      minRefreshableVersion: model.minRefreshableVersion || "3",
+      useAutoFormatting: model.useAutoFormatting ? "1" : "0",
+      itemPrintTitles: model.itemPrintTitles ? "1" : "0",
+      createdVersion: model.createdVersion || "8",
+      indent: model.indent !== undefined ? String(model.indent) : "0",
+      compact: model.compact ? "1" : "0",
+      compactData: model.compactData ? "1" : "0",
+      multipleFieldFilters: model.multipleFieldFilters ? "1" : "0"
+    });
+
+    // Location
+    if (model.location) {
+      xmlStream.leafNode("location", {
+        ref: model.location.ref,
+        firstHeaderRow: model.location.firstHeaderRow,
+        firstDataRow: model.location.firstDataRow,
+        firstDataCol: model.location.firstDataCol
+      });
+    }
+
+    // Pivot fields
+    if (model.pivotFields.length > 0) {
+      xmlStream.openNode("pivotFields", { count: model.pivotFields.length });
+      for (const pivotField of model.pivotFields) {
+        this.renderPivotFieldLoaded(xmlStream, pivotField);
+      }
+      xmlStream.closeNode();
+    }
+
+    // Row fields
+    if (model.rowFields.length > 0) {
+      xmlStream.openNode("rowFields", { count: model.rowFields.length });
+      for (const fieldIndex of model.rowFields) {
+        xmlStream.leafNode("field", { x: fieldIndex });
+      }
+      xmlStream.closeNode();
+    }
+
+    // Row items (simplified - just grand total)
+    xmlStream.writeXml(`
+      <rowItems count="1">
+        <i t="grand"><x /></i>
+      </rowItems>`);
+
+    // Col fields
+    const colFieldCount = model.colFields.length === 0 ? 1 : model.colFields.length;
+    xmlStream.openNode("colFields", { count: colFieldCount });
+    if (model.colFields.length === 0) {
+      xmlStream.leafNode("field", { x: -2 });
+    } else {
+      for (const fieldIndex of model.colFields) {
+        xmlStream.leafNode("field", { x: fieldIndex });
+      }
+    }
+    xmlStream.closeNode();
+
+    // Col items (simplified - just grand total)
+    xmlStream.writeXml(`
+      <colItems count="1">
+        <i t="grand"><x /></i>
+      </colItems>`);
+
+    // Data fields
+    if (model.dataFields.length > 0) {
+      xmlStream.openNode("dataFields", { count: model.dataFields.length });
+      for (const dataField of model.dataFields) {
+        const attrs: any = {
+          name: dataField.name,
+          fld: dataField.fld,
+          baseField: dataField.baseField ?? 0,
+          baseItem: dataField.baseItem ?? 0
+        };
+        if (dataField.subtotal && dataField.subtotal !== "sum") {
+          attrs.subtotal = dataField.subtotal;
+        }
+        xmlStream.leafNode("dataField", attrs);
+      }
+      xmlStream.closeNode();
+    }
+
+    // Style info
+    xmlStream.leafNode("pivotTableStyleInfo", {
+      name: model.styleName || "PivotStyleLight16",
+      showRowHeaders: "1",
+      showColHeaders: "1",
+      showRowStripes: "0",
+      showColStripes: "0",
+      showLastColumn: "1"
+    });
+
+    // Extensions
+    xmlStream.writeXml(`
+      <extLst>
+        <ext
+          uri="{962EF5D1-5CA2-4c93-8EF4-DBF5C05439D2}"
+          xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"
+        >
+          <x14:pivotTableDefinition
+            hideValuesRow="1"
+            xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main"
+          />
+        </ext>
+        <ext
+          uri="{747A6164-185A-40DC-8AA5-F01512510D54}"
+          xmlns:xpdl="http://schemas.microsoft.com/office/spreadsheetml/2016/pivotdefaultlayout"
+        >
+          <xpdl:pivotTableDefinition16
+            EnabledSubtotalsDefault="0"
+            SubtotalsOnTopDefault="0"
+          />
+        </ext>
+      </extLst>
+    `);
+
+    xmlStream.closeNode();
+  }
+
+  /**
+   * Render a loaded pivot field
+   */
+  private renderPivotFieldLoaded(xmlStream: any, field: ParsedPivotField): void {
+    const attrs: any = {
+      compact: field.compact ? "1" : "0",
+      outline: field.outline ? "1" : "0",
+      showAll: field.showAll ? "1" : "0",
+      defaultSubtotal: field.defaultSubtotal ? "1" : "0"
+    };
+
+    if (field.axis) {
+      attrs.axis = field.axis;
+    }
+    if (field.dataField) {
+      attrs.dataField = "1";
+    }
+
+    if (field.items && field.items.length > 0) {
+      xmlStream.openNode("pivotField", attrs);
+      xmlStream.openNode("items", { count: field.items.length + 1 });
+      for (const itemIndex of field.items) {
+        xmlStream.leafNode("item", { x: itemIndex });
+      }
+      // Grand total item
+      xmlStream.writeXml('<item t="default" />');
+      xmlStream.closeNode(); // items
+      xmlStream.closeNode(); // pivotField
+    } else {
+      xmlStream.leafNode("pivotField", attrs);
+    }
+  }
+
+  parseOpen(node: any): boolean {
+    const { name, attributes } = node;
+
+    switch (name) {
+      case this.tag:
+        // pivotTableDefinition root element
+        this.reset();
+        this.model = {
+          name: attributes.name,
+          cacheId: parseInt(attributes.cacheId || "0", 10),
+          uid: attributes["xr:uid"],
+          pivotFields: [],
+          rowFields: [],
+          colFields: [],
+          dataFields: [],
+          applyNumberFormats: attributes.applyNumberFormats,
+          applyBorderFormats: attributes.applyBorderFormats,
+          applyFontFormats: attributes.applyFontFormats,
+          applyPatternFormats: attributes.applyPatternFormats,
+          applyAlignmentFormats: attributes.applyAlignmentFormats,
+          applyWidthHeightFormats: attributes.applyWidthHeightFormats,
+          dataCaption: attributes.dataCaption,
+          updatedVersion: attributes.updatedVersion,
+          minRefreshableVersion: attributes.minRefreshableVersion,
+          createdVersion: attributes.createdVersion,
+          useAutoFormatting: attributes.useAutoFormatting === "1",
+          itemPrintTitles: attributes.itemPrintTitles === "1",
+          indent: attributes.indent ? parseInt(attributes.indent, 10) : 0,
+          compact: attributes.compact === "1",
+          compactData: attributes.compactData === "1",
+          multipleFieldFilters: attributes.multipleFieldFilters === "1",
+          isLoaded: true
+        };
+        break;
+
+      case "location":
+        if (this.model) {
+          this.model.location = {
+            ref: attributes.ref,
+            firstHeaderRow: attributes.firstHeaderRow
+              ? parseInt(attributes.firstHeaderRow, 10)
+              : undefined,
+            firstDataRow: attributes.firstDataRow
+              ? parseInt(attributes.firstDataRow, 10)
+              : undefined,
+            firstDataCol: attributes.firstDataCol
+              ? parseInt(attributes.firstDataCol, 10)
+              : undefined
+          };
+        }
+        break;
+
+      case "pivotFields":
+        this.inPivotFields = true;
+        break;
+
+      case "pivotField":
+        if (this.inPivotFields) {
+          this.currentPivotField = {
+            axis: attributes.axis as any,
+            dataField: attributes.dataField === "1",
+            items: [],
+            compact: attributes.compact === "1",
+            outline: attributes.outline === "1",
+            showAll: attributes.showAll === "1",
+            defaultSubtotal: attributes.defaultSubtotal === "1"
+          };
+        }
+        break;
+
+      case "items":
+        if (this.currentPivotField) {
+          this.inItems = true;
+        }
+        break;
+
+      case "item":
+        if (this.inItems && this.currentPivotField && attributes.x !== undefined) {
+          this.currentPivotField.items!.push(parseInt(attributes.x, 10));
+        }
+        break;
+
+      case "rowFields":
+        this.inRowFields = true;
+        break;
+
+      case "colFields":
+        this.inColFields = true;
+        break;
+
+      case "dataFields":
+        this.inDataFields = true;
+        break;
+
+      case "rowItems":
+        this.inRowItems = true;
+        break;
+
+      case "colItems":
+        this.inColItems = true;
+        break;
+
+      case "field":
+        // Handle field element (used in rowFields, colFields)
+        if (this.model) {
+          const fieldIndex = parseInt(attributes.x || "0", 10);
+          if (this.inRowFields) {
+            this.model.rowFields.push(fieldIndex);
+          } else if (this.inColFields) {
+            this.model.colFields.push(fieldIndex);
+          }
+        }
+        break;
+
+      case "dataField":
+        if (this.inDataFields && this.model) {
+          this.model.dataFields.push({
+            name: xmlDecode(attributes.name || ""),
+            fld: parseInt(attributes.fld || "0", 10),
+            baseField: attributes.baseField ? parseInt(attributes.baseField, 10) : 0,
+            baseItem: attributes.baseItem ? parseInt(attributes.baseItem, 10) : 0,
+            subtotal: attributes.subtotal as any
+          });
+        }
+        break;
+
+      case "pivotTableStyleInfo":
+        if (this.model) {
+          this.model.styleName = attributes.name;
+        }
+        break;
+    }
+
+    return true;
   }
 
   parseText(_text: string): void {
-    // TK
+    // No text content in pivot table elements
   }
 
-  parseClose(_name: string): boolean {
-    // TK
-    return false;
+  parseClose(name: string): boolean {
+    switch (name) {
+      case this.tag:
+        // End of pivotTableDefinition
+        return false;
+
+      case "pivotFields":
+        this.inPivotFields = false;
+        break;
+
+      case "pivotField":
+        if (this.currentPivotField && this.model) {
+          this.model.pivotFields.push(this.currentPivotField);
+          this.currentPivotField = null;
+        }
+        break;
+
+      case "items":
+        this.inItems = false;
+        break;
+
+      case "rowFields":
+        this.inRowFields = false;
+        break;
+
+      case "colFields":
+        this.inColFields = false;
+        break;
+
+      case "dataFields":
+        this.inDataFields = false;
+        break;
+
+      case "rowItems":
+        this.inRowItems = false;
+        break;
+
+      case "colItems":
+        this.inColItems = false;
+        break;
+    }
+
+    return true;
   }
 
   reconcile(_model: any, _options: any): void {
-    // TK
+    // No reconciliation needed
   }
 
   static PIVOT_TABLE_ATTRIBUTES = {
@@ -223,4 +697,4 @@ function renderPivotField(fieldType: string | null, sharedItems: string[] | null
   `;
 }
 
-export { PivotTableXform };
+export { PivotTableXform, type ParsedPivotTableModel };

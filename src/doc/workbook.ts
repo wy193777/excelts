@@ -46,6 +46,8 @@ interface WorkbookModel {
   themes?: unknown;
   media: WorkbookMedia[];
   pivotTables: PivotTable[];
+  /** Loaded pivot tables from file - used during reconciliation */
+  loadedPivotTables?: any[];
   calcProperties: Partial<CalculationProperties>;
 }
 
@@ -293,7 +295,10 @@ class Workbook {
     this.views = value.views;
     this._themes = value.themes;
     this.media = value.media || [];
-    this.pivotTables = value.pivotTables || [];
+
+    // Handle pivot tables - either newly created or loaded from file
+    // Loaded pivot tables come from loadedPivotTables after reconciliation
+    this.pivotTables = value.pivotTables || value.loadedPivotTables || [];
   }
 }
 

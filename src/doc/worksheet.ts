@@ -590,10 +590,8 @@ class Worksheet {
     return count;
   }
 
-  /**
-   * Get or create row by 1-based index
-   */
-  getRow(r: number): Row {
+  // get a row by row number.
+  getRow(r: number): any {
     let row = this._rows[r - 1];
     if (!row) {
       row = this._rows[r - 1] = new Row(this, r);
@@ -601,25 +599,19 @@ class Worksheet {
     return row;
   }
 
-  /**
-   * Get or create rows by 1-based index
-   */
-  getRows(start: number, length: number): Row[] | undefined {
+  // get multiple rows by row number.
+  getRows(start: number, length: number): any[] | undefined {
     if (length < 1) {
       return undefined;
     }
-    const rows: Row[] = [];
+    const rows: any[] = [];
     for (let i = start; i < start + length; i++) {
       rows.push(this.getRow(i));
     }
     return rows;
   }
 
-  /**
-   * Add a couple of Rows by key-value, after the last current row, using the column keys,
-   * or add a row by contiguous Array (assign to columns A, B & C)
-   */
-  addRow(value: RowValues, style: string = "n"): Row {
+  addRow(value: any, style: string = "n"): any {
     const rowNo = this._nextRow;
     const row = this.getRow(rowNo);
     row.values = value;
@@ -627,10 +619,7 @@ class Worksheet {
     return row;
   }
 
-  /**
-   * Add multiple rows by providing an array of arrays or key-value pairs
-   */
-  addRows(value: RowValues[], style: string = "n"): Row[] {
+  addRows(value: any[], style: string = "n"): any[] {
     const rows: Row[] = [];
     value.forEach(row => {
       rows.push(this.addRow(row, style));
@@ -638,21 +627,13 @@ class Worksheet {
     return rows;
   }
 
-  /**
-   * Insert a Row by key-value, at the position (shifting down all rows from position),
-   * using the column keys, or add a row by contiguous Array (assign to columns A, B & C)
-   */
-  insertRow(pos: number, value: RowValues, style: string = "n"): Row {
+  insertRow(pos: number, value: any, style: string = "n"): any {
     this.spliceRows(pos, 0, value);
     this._setStyleOption(pos, style);
     return this.getRow(pos);
   }
 
-  /**
-   * Insert multiple rows at position (shifting down all rows from position)
-   * by providing an array of arrays or key-value pairs
-   */
-  insertRows(pos: number, values: RowValues[], style: string = "n"): Row[] | undefined {
+  insertRows(pos: number, values: any[], style: string = "n"): Row[] | undefined {
     this.spliceRows(pos, 0, ...values);
     if (style !== "n") {
       // copy over the styles

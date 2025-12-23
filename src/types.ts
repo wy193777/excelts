@@ -863,105 +863,14 @@ export interface RowBreak {
 // ============================================================================
 // exceljs-compatible namespaces
 // ============================================================================
-export declare namespace config {
-  function setValue(key: "promise", promise: any): void;
-}
+export declare const config: {
+  setValue(key: "promise", promise: any): void;
+};
 
-export declare namespace stream {
-  namespace xlsx {
-    interface WorkbookWriterOptions {
-      /**
-       * Specifies a writable stream to write the XLSX workbook to.
-       */
-      stream: import("stream").Stream;
-
-      /**
-       * If stream not specified, this field specifies the path to a file to write the XLSX workbook to.
-       */
-      filename: string;
-
-      /**
-       * Specifies whether to use shared strings in the workbook. Default is false
-       */
-      useSharedStrings: boolean;
-
-      /**
-       * Specifies whether to add style information to the workbook.
-       * Styles can add some performance overhead. Default is false
-       */
-      useStyles: boolean;
-    }
-
-    interface ArchiverZipOptions {
-      comment: string;
-      forceLocalTime: boolean;
-      forceZip64: boolean;
-      store: boolean;
-      zlib: Partial<ZlibOptions>;
-    }
-
-    interface ZlibOptions {
-      flush: number;
-      finishFlush: number;
-      chunkSize: number;
-      windowBits: number;
-      level: number;
-      memLevel: number;
-      strategy: number;
-      dictionary: Buffer | NodeJS.TypedArray | DataView | ArrayBuffer;
-    }
-
-    interface WorkbookStreamWriterOptions extends WorkbookWriterOptions {
-      zip: Partial<ArchiverZipOptions>;
-    }
-
-    class WorkbookWriter {
-      constructor(options: Partial<WorkbookStreamWriterOptions>);
-      commit(): Promise<void>;
-      addStyles(): Promise<void>;
-      addThemes(): Promise<void>;
-      addOfficeRels(): Promise<void>;
-      addContentTypes(): Promise<void>;
-      addApp(): Promise<void>;
-      addCore(): Promise<void>;
-      addSharedStrings(): Promise<void>;
-      addWorkbookRels(): Promise<void>;
-      addWorkbook(): Promise<void>;
-    }
-
-    interface WorkbookStreamReaderOptions {
-      worksheets?: "emit" | "ignore";
-      sharedStrings?: "cache" | "emit" | "ignore";
-      hyperlinks?: "cache" | "emit" | "ignore";
-      styles?: "cache" | "ignore";
-      entries?: "emit" | "ignore";
-    }
-
-    class WorkbookReader {
-      constructor(
-        input: string | import("stream").Stream,
-        options: Partial<WorkbookStreamReaderOptions>
-      );
-      read(): Promise<void>;
-      [Symbol.asyncIterator](): AsyncGenerator<WorksheetReader>;
-      parse(): AsyncIterator<any>;
-    }
-
-    interface WorksheetReaderOptions {
-      workbook: import("./doc/workbook.js").Workbook;
-      id: number;
-      entry: import("stream").Stream;
-      options: WorkbookStreamReaderOptions;
-    }
-
-    class WorksheetReader {
-      constructor(options: WorksheetReaderOptions);
-      read(): Promise<void>;
-      [Symbol.asyncIterator](): AsyncGenerator<import("./doc/row.js").Row>;
-      parse(): AsyncIterator<Array<any>>;
-      dimensions(): number;
-      columns(): number;
-      getColumn(c: number): import("./doc/column.js").Column;
-    }
-  }
-}
+export declare const stream: {
+  xlsx: {
+    WorkbookWriter: new (options: unknown) => unknown;
+    WorkbookReader: new (input: unknown, options: unknown) => unknown;
+    WorksheetReader: new (options: unknown) => unknown;
+  };
+};

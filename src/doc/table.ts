@@ -460,10 +460,10 @@ class Table {
     this._assign(this.table, "totalsRow", value);
   }
 
-  get theme(): string | undefined {
+  get theme(): TableStyleProperties["theme"] | undefined {
     return this.table.style.theme;
   }
-  set theme(value: string | undefined) {
+  set theme(value: TableStyleProperties["theme"] | undefined) {
     this.table.style.theme = value;
   }
 

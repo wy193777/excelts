@@ -7,12 +7,14 @@
 // Buffer type for cross-platform compatibility
 // Node.js Buffer extends Uint8Array, so Uint8Array is the common interface
 // ============================================================================
+// Practical Buffer type for this codebase: Node.js Buffer is a Uint8Array.
+// (This avoids breaking assignments like `{ buffer: fs.readFileSync(...) }`.)
 export type Buffer = Uint8Array;
 
 // ============================================================================
 // Paper Size Enum
 // ============================================================================
-export enum PaperSize {
+export const enum PaperSize {
   Legal = 5,
   Executive = 7,
   A4 = 9,
@@ -252,13 +254,13 @@ export interface HeaderFooter {
 // Worksheet View Types
 // ============================================================================
 export interface WorksheetViewCommon {
-  rightToLeft?: boolean;
-  activeCell?: string;
-  showRuler?: boolean;
-  showRowColHeaders?: boolean;
-  showGridLines?: boolean;
-  zoomScale?: number;
-  zoomScaleNormal?: number;
+  rightToLeft: boolean;
+  activeCell: string;
+  showRuler: boolean;
+  showRowColHeaders: boolean;
+  showGridLines: boolean;
+  zoomScale: number;
+  zoomScaleNormal: number;
 }
 
 export interface WorksheetViewNormal {
@@ -691,16 +693,71 @@ export interface ConditionalFormattingOptions {
   rules: ConditionalFormattingRule[];
 }
 
-export interface ConditionalFormattingOptions {
-  ref: string;
-  rules: ConditionalFormattingRule[];
-}
-
 // ============================================================================
 // Table Types
 // ============================================================================
 export interface TableStyleProperties {
-  theme?: string;
+  theme?:
+    | "TableStyleDark1"
+    | "TableStyleDark10"
+    | "TableStyleDark11"
+    | "TableStyleDark2"
+    | "TableStyleDark3"
+    | "TableStyleDark4"
+    | "TableStyleDark5"
+    | "TableStyleDark6"
+    | "TableStyleDark7"
+    | "TableStyleDark8"
+    | "TableStyleDark9"
+    | "TableStyleLight1"
+    | "TableStyleLight10"
+    | "TableStyleLight11"
+    | "TableStyleLight12"
+    | "TableStyleLight13"
+    | "TableStyleLight14"
+    | "TableStyleLight15"
+    | "TableStyleLight16"
+    | "TableStyleLight17"
+    | "TableStyleLight18"
+    | "TableStyleLight19"
+    | "TableStyleLight2"
+    | "TableStyleLight20"
+    | "TableStyleLight21"
+    | "TableStyleLight3"
+    | "TableStyleLight4"
+    | "TableStyleLight5"
+    | "TableStyleLight6"
+    | "TableStyleLight7"
+    | "TableStyleLight8"
+    | "TableStyleLight9"
+    | "TableStyleMedium1"
+    | "TableStyleMedium10"
+    | "TableStyleMedium11"
+    | "TableStyleMedium12"
+    | "TableStyleMedium13"
+    | "TableStyleMedium14"
+    | "TableStyleMedium15"
+    | "TableStyleMedium16"
+    | "TableStyleMedium17"
+    | "TableStyleMedium18"
+    | "TableStyleMedium19"
+    | "TableStyleMedium2"
+    | "TableStyleMedium20"
+    | "TableStyleMedium21"
+    | "TableStyleMedium22"
+    | "TableStyleMedium23"
+    | "TableStyleMedium24"
+    | "TableStyleMedium25"
+    | "TableStyleMedium26"
+    | "TableStyleMedium27"
+    | "TableStyleMedium28"
+    | "TableStyleMedium3"
+    | "TableStyleMedium4"
+    | "TableStyleMedium5"
+    | "TableStyleMedium6"
+    | "TableStyleMedium7"
+    | "TableStyleMedium8"
+    | "TableStyleMedium9";
   showFirstColumn?: boolean;
   showLastColumn?: boolean;
   showRowStripes?: boolean;
@@ -801,4 +858,107 @@ export interface RowBreak {
   max: number;
   min?: number;
   man: number;
+}
+
+// ============================================================================
+// exceljs-compatible namespaces
+// ============================================================================
+export declare namespace config {
+  function setValue(key: "promise", promise: any): void;
+}
+
+export declare namespace stream {
+  namespace xlsx {
+    interface WorkbookWriterOptions {
+      /**
+       * Specifies a writable stream to write the XLSX workbook to.
+       */
+      stream: import("stream").Stream;
+
+      /**
+       * If stream not specified, this field specifies the path to a file to write the XLSX workbook to.
+       */
+      filename: string;
+
+      /**
+       * Specifies whether to use shared strings in the workbook. Default is false
+       */
+      useSharedStrings: boolean;
+
+      /**
+       * Specifies whether to add style information to the workbook.
+       * Styles can add some performance overhead. Default is false
+       */
+      useStyles: boolean;
+    }
+
+    interface ArchiverZipOptions {
+      comment: string;
+      forceLocalTime: boolean;
+      forceZip64: boolean;
+      store: boolean;
+      zlib: Partial<ZlibOptions>;
+    }
+
+    interface ZlibOptions {
+      flush: number;
+      finishFlush: number;
+      chunkSize: number;
+      windowBits: number;
+      level: number;
+      memLevel: number;
+      strategy: number;
+      dictionary: Buffer | NodeJS.TypedArray | DataView | ArrayBuffer;
+    }
+
+    interface WorkbookStreamWriterOptions extends WorkbookWriterOptions {
+      zip: Partial<ArchiverZipOptions>;
+    }
+
+    class WorkbookWriter {
+      constructor(options: Partial<WorkbookStreamWriterOptions>);
+      commit(): Promise<void>;
+      addStyles(): Promise<void>;
+      addThemes(): Promise<void>;
+      addOfficeRels(): Promise<void>;
+      addContentTypes(): Promise<void>;
+      addApp(): Promise<void>;
+      addCore(): Promise<void>;
+      addSharedStrings(): Promise<void>;
+      addWorkbookRels(): Promise<void>;
+      addWorkbook(): Promise<void>;
+    }
+
+    interface WorkbookStreamReaderOptions {
+      worksheets?: "emit" | "ignore";
+      sharedStrings?: "cache" | "emit" | "ignore";
+      hyperlinks?: "cache" | "emit" | "ignore";
+      styles?: "cache" | "ignore";
+      entries?: "emit" | "ignore";
+    }
+
+    class WorkbookReader {
+      constructor(input: string | import("stream").Stream, options: Partial<WorkbookStreamReaderOptions>);
+      read(): Promise<void>;
+      [Symbol.asyncIterator](): AsyncGenerator<WorksheetReader>;
+      parse(): AsyncIterator<any>;
+    }
+
+    interface WorksheetReaderOptions {
+      workbook: import("./doc/workbook.js").Workbook;
+      id: number;
+      entry: import("stream").Stream;
+      options: WorkbookStreamReaderOptions;
+    }
+
+    class WorksheetReader {
+      constructor(options: WorksheetReaderOptions);
+      read(): Promise<void>;
+      [Symbol.asyncIterator](): AsyncGenerator<import("./doc/row.js").Row>;
+      parse(): AsyncIterator<Array<any>>;
+      dimensions(): number;
+      columns(): number;
+      getColumn(c: number): import("./doc/column.js").Column;
+    }
+  }
 }

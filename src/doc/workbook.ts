@@ -225,8 +225,8 @@ class Workbook {
     return id;
   }
 
-  getImage(id: number | string): WorkbookMedia | undefined {
-    return this.media[Number(id)];
+  getImage(id: number): Image {
+    return this.media[Number(id)] as unknown as Image;
   }
 
   get model(): WorkbookModel {

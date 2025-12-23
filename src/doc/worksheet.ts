@@ -567,8 +567,12 @@ class Worksheet {
    * @param start - The 1-indexed starting row number
    * @param length - The length of the expected array
    */
-  findRows(start: number, length: number): (Row | undefined)[] {
-    return this._rows.slice(start - 1, start - 1 + length);
+  findRows(start: number, length: number): Row[] | undefined {
+    const rows = this._rows.slice(start - 1, start - 1 + length);
+    if (rows.length !== length || rows.some(r => !r)) {
+      return undefined;
+    }
+    return rows as Row[];
   }
 
   /**
@@ -591,7 +595,7 @@ class Worksheet {
   }
 
   // get a row by row number.
-  getRow(r: number): any {
+  getRow(r: number): Row {
     let row = this._rows[r - 1];
     if (!row) {
       row = this._rows[r - 1] = new Row(this, r);
@@ -600,18 +604,18 @@ class Worksheet {
   }
 
   // get multiple rows by row number.
-  getRows(start: number, length: number): any[] | undefined {
+  getRows(start: number, length: number): Row[] | undefined {
     if (length < 1) {
       return undefined;
     }
-    const rows: any[] = [];
+    const rows: Row[] = [];
     for (let i = start; i < start + length; i++) {
       rows.push(this.getRow(i));
     }
     return rows;
   }
 
-  addRow(value: any, style: string = "n"): any {
+  addRow(value: RowValues, style: string = "n"): Row {
     const rowNo = this._nextRow;
     const row = this.getRow(rowNo);
     row.values = value;
@@ -619,21 +623,21 @@ class Worksheet {
     return row;
   }
 
-  addRows(value: any[], style: string = "n"): any[] {
+  addRows(values: RowValues[], style: string = "n"): Row[] {
     const rows: Row[] = [];
-    value.forEach(row => {
-      rows.push(this.addRow(row, style));
+    values.forEach(value => {
+      rows.push(this.addRow(value, style));
     });
     return rows;
   }
 
-  insertRow(pos: number, value: any, style: string = "n"): any {
+  insertRow(pos: number, value: RowValues, style: string = "n"): Row {
     this.spliceRows(pos, 0, value);
     this._setStyleOption(pos, style);
     return this.getRow(pos);
   }
 
-  insertRows(pos: number, values: any[], style: string = "n"): Row[] | undefined {
+  insertRows(pos: number, values: RowValues[], style: string = "n"): Row[] | undefined {
     this.spliceRows(pos, 0, ...values);
     if (style !== "n") {
       // copy over the styles
@@ -981,7 +985,7 @@ class Worksheet {
    * Using the image id from `Workbook.addImage`,
    * embed an image within the worksheet to cover a range
    */
-  addImage(imageId: string | number, range: AddImageRange): void {
+  addImage(imageId: number, range: AddImageRange): void {
     const model = {
       type: "image",
       imageId: String(imageId),
@@ -997,7 +1001,7 @@ class Worksheet {
   /**
    * Using the image id from `Workbook.addImage`, set the background to the worksheet
    */
-  addBackgroundImage(imageId: string | number): void {
+  addBackgroundImage(imageId: number): void {
     const model = {
       type: "background",
       imageId: String(imageId)

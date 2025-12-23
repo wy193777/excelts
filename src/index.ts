@@ -1,11 +1,12 @@
 // Export main classes
 export { Workbook } from "./doc/workbook.js";
 export { ModelContainer } from "./doc/modelcontainer.js";
-export { WorkbookWriter } from "./stream/xlsx/workbook-writer.js";
-export { WorkbookReader } from "./stream/xlsx/workbook-reader.js";
 export { Worksheet } from "./doc/worksheet.js";
-export { WorksheetReader } from "./stream/xlsx/worksheet-reader.js";
-export { WorksheetWriter } from "./stream/xlsx/worksheet-writer.js";
+import { WorkbookWriter } from "./stream/xlsx/workbook-writer.js";
+import { WorkbookReader } from "./stream/xlsx/workbook-reader.js";
+import { WorksheetReader } from "./stream/xlsx/worksheet-reader.js";
+import { WorksheetWriter } from "./stream/xlsx/worksheet-writer.js";
+export { WorkbookWriter, WorkbookReader, WorksheetReader, WorksheetWriter };
 export { Row } from "./doc/row.js";
 export { Column } from "./doc/column.js";
 export { Cell } from "./doc/cell.js";
@@ -34,6 +35,15 @@ export * from "./doc/enums.js";
 export * from "./types.js";
 
 export * from "./utils/sheet-utils.js";
+
+// exceljs-compatible namespace export
+export const stream = {
+  xlsx: {
+    WorkbookWriter,
+    WorkbookReader,
+    WorksheetReader
+  }
+};
 
 // Export CSV class and types
 export type {

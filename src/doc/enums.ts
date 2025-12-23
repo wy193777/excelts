@@ -9,8 +9,7 @@ export enum ValueType {
   SharedString = 7,
   RichText = 8,
   Boolean = 9,
-  Error = 10,
-  JSON = 11 // Internal type for JSON values that serialize as String
+  Error = 10
 }
 
 export enum FormulaType {
@@ -39,17 +38,15 @@ export enum ReadingOrder {
   RightToLeft = 2
 }
 
-export const ErrorValue = {
-  NotApplicable: "#N/A",
-  Ref: "#REF!",
-  Name: "#NAME?",
-  DivZero: "#DIV/0!",
-  Null: "#NULL!",
-  Value: "#VALUE!",
-  Num: "#NUM!"
-} as const;
-
-export type ErrorValueType = (typeof ErrorValue)[keyof typeof ErrorValue];
+export enum ErrorValue {
+  NotApplicable = "#N/A",
+  Ref = "#REF!",
+  Name = "#NAME?",
+  DivZero = "#DIV/0!",
+  Null = "#NULL!",
+  Value = "#VALUE!",
+  Num = "#NUM!"
+}
 
 export const Enums = {
   ValueType,

@@ -77,6 +77,7 @@ class WorksheetWriter {
   id: number;
   name: string;
   state: string;
+  rId?: string;
   _rows: any[] | null;
   _columns: any[] | null;
   _keys: { [key: string]: any };

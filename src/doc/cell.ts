@@ -1372,7 +1372,8 @@ const Value = {
         return Cell.Types.Error;
       }
     }
-    return Cell.Types.JSON;
+    // Internal type for JSON values that serialize as String
+    return 11;
   },
 
   // map valueType to constructor
@@ -1384,7 +1385,7 @@ const Value = {
     { t: Cell.Types.Hyperlink, f: HyperlinkValue },
     { t: Cell.Types.Formula, f: FormulaValue },
     { t: Cell.Types.Merge, f: MergeValue },
-    { t: Cell.Types.JSON, f: JSONValue },
+    { t: 11, f: JSONValue },
     { t: Cell.Types.SharedString, f: SharedStringValue },
     { t: Cell.Types.RichText, f: RichTextValue },
     { t: Cell.Types.Boolean, f: BooleanValue },

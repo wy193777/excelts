@@ -13,9 +13,19 @@ import { WorkbookXform } from "../../xlsx/xform/book/workbook-xform.js";
 import { SharedStringsXform } from "../../xlsx/xform/strings/shared-strings-xform.js";
 import { WorksheetWriter } from "./worksheet-writer.js";
 import { theme1Xml } from "../../xlsx/xml/theme1.js";
-import type Stream from "stream";
+import type { Duplex, Writable } from "stream";
+import type { WorkbookView, Image as WorkbookImage, AddWorksheetOptions } from "../../types.js";
 
-interface WorkbookWriterOptions {
+type ZipOptions =
+  | {
+      zlib?: { level?: number };
+      compressionOptions?: { level?: number };
+      // Allow extra zip library options without leaking `any`
+      [key: string]: unknown;
+    }
+  | undefined;
+
+interface WorkbookWriterOptions extends Partial<AddWorksheetOptions> {
   created?: Date;
   modified?: Date;
   creator?: string;
@@ -23,10 +33,23 @@ interface WorkbookWriterOptions {
   lastPrinted?: Date;
   useSharedStrings?: boolean;
   useStyles?: boolean;
-  zip?: any;
-  stream?: Stream;
+  zip?: ZipOptions;
+  stream?: Writable;
   filename?: string;
 }
+
+type Medium = {
+  type: "image";
+  name: string;
+  extension: string;
+  filename?: string;
+  buffer?: Uint8Array;
+  base64?: string;
+};
+
+type StreamBufLike = Duplex & {
+  emit(event: "zipped"): boolean;
+};
 
 class WorkbookWriter {
   created: Date;
@@ -35,18 +58,18 @@ class WorkbookWriter {
   lastModifiedBy: string;
   lastPrinted?: Date;
   useSharedStrings: boolean;
-  sharedStrings: any;
-  styles: any;
-  _definedNames: any;
-  _worksheets: any[];
-  views: any[];
-  zipOptions?: any;
+  sharedStrings: SharedStrings;
+  styles: StylesXform;
+  _definedNames: DefinedNames;
+  _worksheets: Array<WorksheetWriter | undefined>;
+  views: WorkbookView[];
+  zipOptions?: ZipOptions;
   compressionLevel: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
-  media: any[];
-  commentRefs: any[];
-  zip: any;
-  stream: any;
-  promise: Promise<any>;
+  media: Medium[];
+  commentRefs: unknown[];
+  zip: Zip;
+  stream: Writable;
+  promise: Promise<unknown>;
 
   constructor(options: WorkbookWriterOptions = {}) {
     this.created = options.created || new Date();
@@ -60,7 +83,7 @@ class WorkbookWriter {
     this.sharedStrings = new SharedStrings();
 
     // style manager
-    this.styles = options.useStyles ? new StylesXform(true) : new (StylesXform as any).Mock(true);
+    this.styles = options.useStyles ? new StylesXform(true) : new StylesXform.Mock(true);
 
     // defined names
     this._definedNames = new DefinedNames();
@@ -112,12 +135,12 @@ class WorkbookWriter {
     this.promise = Promise.all([this.addThemes(), this.addOfficeRels()]);
   }
 
-  get definedNames(): any {
+  get definedNames(): DefinedNames {
     return this._definedNames;
   }
 
-  _openStream(path: string): any {
-    const stream = new StreamBuf({ bufSize: 65536, batch: true });
+  _openStream(path: string): StreamBufLike {
+    const stream = new StreamBuf({ bufSize: 65536, batch: true }) as unknown as StreamBufLike;
 
     // Create a ZipDeflate for this file with compression
     const zipFile = new ZipDeflate(path, { level: this.compressionLevel });
@@ -144,7 +167,7 @@ class WorkbookWriter {
     return stream;
   }
 
-  _addFile(data: string | Buffer, name: string, base64?: boolean): void {
+  _addFile(data: string | Uint8Array | Buffer, name: string, base64?: boolean): void {
     // Helper method to add a file to the zip using fflate with compression
     const zipFile = new ZipDeflate(name, { level: this.compressionLevel });
     this.zip.add(zipFile);
@@ -157,14 +180,14 @@ class WorkbookWriter {
     } else if (typeof data === "string") {
       buffer = Buffer.from(data, "utf8");
     } else {
-      buffer = new Uint8Array(data);
+      buffer = data instanceof Uint8Array ? data : new Uint8Array(data);
     }
 
     zipFile.push(buffer, true); // true = final chunk
   }
 
   _commitWorksheets(): Promise<void> {
-    const commitWorksheet = function (worksheet: any): Promise<void> {
+    const commitWorksheet = function (worksheet: WorksheetWriter | undefined): Promise<void> {
       if (!worksheet.committed) {
         return new Promise(resolve => {
           // Use once to automatically clean up listener
@@ -179,12 +202,12 @@ class WorkbookWriter {
     // if there are any uncommitted worksheets, commit them now and wait
     const promises = this._worksheets.map(commitWorksheet);
     if (promises.length) {
-      return Promise.all(promises) as any;
+      return Promise.all(promises).then(() => undefined);
     }
     return Promise.resolve();
   }
 
-  async commit(): Promise<any> {
+  async commit(): Promise<void> {
     // commit all worksheets, then add suplimentary files
     await this.promise;
     await this.addMedia();
@@ -198,7 +221,7 @@ class WorkbookWriter {
       this.addWorkbookRels()
     ]);
     await this.addWorkbook();
-    return this._finalize();
+    await this._finalize();
   }
 
   get nextId(): number {
@@ -212,21 +235,30 @@ class WorkbookWriter {
     return this._worksheets.length || 1;
   }
 
-  addImage(image: any): number {
+  addImage(image: WorkbookImage): number {
     const id = this.media.length;
-    const medium = Object.assign({}, image, {
+    const medium = {
+      ...image,
       type: "image",
       name: `image${id}.${image.extension}`
-    });
-    this.media.push(medium);
+    };
+    this.media.push(medium as unknown as Medium);
     return id;
   }
 
-  getImage(id: number): any {
-    return this.media[id];
+  getImage(id: number): WorkbookImage {
+    return this.media[id] as unknown as WorkbookImage;
   }
 
-  addWorksheet(name?: string, options: any = {}): any {
+  addWorksheet(
+    name?: string,
+    options: Partial<AddWorksheetOptions> & {
+      useSharedStrings?: boolean;
+      tabColor?: unknown;
+      // Note: not part of upstream exceljs `AddWorksheetOptions` but supported here
+      autoFilter?: unknown;
+    } = {}
+  ): WorksheetWriter {
     // it's possible to add a worksheet with different than default
     // shared string handling
     // in fact, it's even possible to switch it mid-sheet
@@ -235,12 +267,10 @@ class WorkbookWriter {
 
     if (options.tabColor) {
       console.trace("tabColor option has moved to { properties: tabColor: {...} }");
-      options.properties = Object.assign(
-        {
-          tabColor: options.tabColor
-        },
-        options.properties
-      );
+      options.properties = {
+        tabColor: options.tabColor,
+        ...(options.properties ?? {})
+      };
     }
 
     const id = this.nextId;
@@ -263,7 +293,7 @@ class WorkbookWriter {
     return worksheet;
   }
 
-  getWorksheet(id?: string | number): any {
+  getWorksheet(id?: string | number): WorksheetWriter | undefined {
     if (id === undefined) {
       return this._worksheets.find(() => true);
     }
@@ -271,7 +301,7 @@ class WorkbookWriter {
       return this._worksheets[id];
     }
     if (typeof id === "string") {
-      return this._worksheets.find((worksheet: any) => worksheet && worksheet.name === id);
+      return this._worksheets.find(worksheet => worksheet?.name === id);
     }
     return undefined;
   }
@@ -318,7 +348,7 @@ class WorkbookWriter {
     });
   }
 
-  addMedia(): Promise<any> {
+  addMedia(): Promise<void> {
     return Promise.all(
       this.media.map(async medium => {
         if (medium.type === "image") {
@@ -349,7 +379,7 @@ class WorkbookWriter {
         }
         throw new Error("Unsupported media");
       })
-    );
+    ).then(() => undefined);
   }
 
   addApp(): Promise<void> {
@@ -433,7 +463,7 @@ class WorkbookWriter {
     });
   }
 
-  _finalize(): Promise<any> {
+  _finalize(): Promise<void> {
     return new Promise((resolve, reject) => {
       const onError = (err: Error) => {
         this.stream.removeListener("finish", onFinish);
@@ -442,7 +472,7 @@ class WorkbookWriter {
 
       const onFinish = () => {
         this.stream.removeListener("error", onError);
-        resolve(this);
+        resolve();
       };
 
       this.stream.once("error", onError);

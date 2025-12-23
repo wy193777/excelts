@@ -502,7 +502,7 @@ describe("WorkbookWriter", () => {
       const ws2 = wb2.getWorksheet("Hello");
 
       const backgroundId2 = ws2.getBackgroundImageId();
-      const image = wb2.getImage(backgroundId2);
+      const image = wb2.getImage(Number(backgroundId2));
       const imageData = await fsReadFileAsync(IMAGE_FILENAME);
       expect(Buffer.compare(imageData, image.buffer)).toBe(0);
     });
@@ -529,7 +529,7 @@ describe("WorkbookWriter", () => {
       const ws2 = wb2.getWorksheet("Hello");
 
       const backgroundId2 = ws2.getBackgroundImageId();
-      const image = wb2.getImage(backgroundId2);
+      const image = wb2.getImage(Number(backgroundId2));
       const imageData = await fsReadFileAsync(IMAGE_FILENAME);
       expect(Buffer.compare(imageData, image.buffer)).toBe(0);
     });

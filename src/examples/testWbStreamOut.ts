@@ -11,7 +11,7 @@ const ws = wb.addWorksheet("blort");
 const style = {
   font: { name: "Comic Sans MS", underline: true, bold: true, size: 16 },
   alignment: { vertical: "middle", horizontal: "center" }
-};
+} as const;
 ws.columns = [
   { header: "A1", width: 10 },
   { header: "B1", width: 20, style },

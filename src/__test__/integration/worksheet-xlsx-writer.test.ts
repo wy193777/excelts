@@ -52,17 +52,21 @@ describe("WorksheetWriter", () => {
       expect(ws.getCell("C1").value).toBe(3.14);
       expect(ws.getCell("D1").value).toBe(now);
       expect(ws.getCell("E1").value).toBe("Hello, World!");
-      expect(ws.getCell("F1").value.text).toBe("www.google.com");
-      expect(ws.getCell("F1").value.hyperlink).toBe("http://www.google.com");
+      const hyperlinkValue = ws.getCell("F1").value as { text: string; hyperlink: string };
+      expect(hyperlinkValue.text).toBe("www.google.com");
+      expect(hyperlinkValue.hyperlink).toBe("http://www.google.com");
 
-      expect(ws.getCell("A2").value.formula).toBe("A1");
-      expect(ws.getCell("A2").value.result).toBe(7);
+      const formulaA2 = ws.getCell("A2").value as { formula: string; result?: unknown };
+      expect(formulaA2.formula).toBe("A1");
+      expect(formulaA2.result).toBe(7);
 
-      expect(ws.getCell("B2").value.formula).toBe(CONCATENATE_HELLO_WORLD);
-      expect(ws.getCell("B2").value.result).toBe("Hello, World!");
+      const formulaB2 = ws.getCell("B2").value as { formula: string; result?: unknown };
+      expect(formulaB2.formula).toBe(CONCATENATE_HELLO_WORLD);
+      expect(formulaB2.result).toBe("Hello, World!");
 
-      expect(ws.getCell("C2").value.formula).toBe("D1");
-      expect(ws.getCell("C2").value.result).toBe(now);
+      const formulaC2 = ws.getCell("C2").value as { formula: string; result?: unknown };
+      expect(formulaC2.formula).toBe("D1");
+      expect(formulaC2.result).toBe(now);
     });
 
     it("stores shared string values properly", () => {
@@ -86,7 +90,8 @@ describe("WorksheetWriter", () => {
       expect(ws.getCell("A1").value).toBe(ws.getCell("A3").value);
 
       // A1 and C2 should not reference the same object
-      expect(ws.getCell("A1").value).toBe(ws.getCell("C2").value.result);
+      const c2Value = ws.getCell("C2").value as { result?: unknown };
+      expect(ws.getCell("A1").value).toBe(c2Value.result);
     });
 
     it("assigns cell types properly", () => {

@@ -47,7 +47,7 @@ const fonts = {
     name: "Comic Sans MS",
     family: 4,
     size: 8,
-    underline: "double",
+    underline: "double" as const,
     bold: true
   }
 };

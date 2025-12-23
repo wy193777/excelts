@@ -938,7 +938,10 @@ export declare namespace stream {
     }
 
     class WorkbookReader {
-      constructor(input: string | import("stream").Stream, options: Partial<WorkbookStreamReaderOptions>);
+      constructor(
+        input: string | import("stream").Stream,
+        options: Partial<WorkbookStreamReaderOptions>
+      );
       read(): Promise<void>;
       [Symbol.asyncIterator](): AsyncGenerator<WorksheetReader>;
       parse(): AsyncIterator<any>;

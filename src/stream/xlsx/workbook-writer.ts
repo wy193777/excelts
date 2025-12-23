@@ -14,7 +14,12 @@ import { SharedStringsXform } from "../../xlsx/xform/strings/shared-strings-xfor
 import { WorksheetWriter } from "./worksheet-writer.js";
 import { theme1Xml } from "../../xlsx/xml/theme1.js";
 import type { Duplex, Writable } from "stream";
-import type { WorkbookView, Image as WorkbookImage, AddWorksheetOptions } from "../../types.js";
+import type {
+  WorkbookView,
+  Image as WorkbookImage,
+  AddWorksheetOptions,
+  AutoFilter
+} from "../../types.js";
 
 type ZipOptions =
   | {
@@ -256,7 +261,7 @@ class WorkbookWriter {
       useSharedStrings?: boolean;
       tabColor?: unknown;
       // Note: not part of upstream exceljs `AddWorksheetOptions` but supported here
-      autoFilter?: unknown;
+      autoFilter?: AutoFilter | null;
     } = {}
   ): WorksheetWriter {
     // it's possible to add a worksheet with different than default

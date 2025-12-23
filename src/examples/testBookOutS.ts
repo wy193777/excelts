@@ -21,7 +21,7 @@ const fonts = {
     name: "Comic Sans MS",
     family: 4,
     size: 16,
-    underline: "double",
+    underline: "double" as const,
     bold: true
   }
 };
@@ -95,7 +95,7 @@ const alignments = [
       textRotation: "vertical"
     }
   }
-];
+] as const;
 // const badAlignments = [
 //   { text: 'Rotate -91', alignment: { textRotation: -91 } },
 //   { text: 'Rotate 91', alignment: { textRotation: 91 } },
@@ -111,11 +111,10 @@ const borders = {
     right: { style: "thin" }
   },
   doubleRed: {
-    color: { argb: "FFFF0000" },
-    top: { style: "double" },
-    left: { style: "double" },
-    bottom: { style: "double" },
-    right: { style: "double" }
+    top: { style: "double", color: { argb: "FFFF0000" } },
+    left: { style: "double", color: { argb: "FFFF0000" } },
+    bottom: { style: "double", color: { argb: "FFFF0000" } },
+    right: { style: "double", color: { argb: "FFFF0000" } }
   },
   thickRainbow: {
     top: { style: "double", color: { argb: "FFFF00FF" } },
@@ -129,23 +128,23 @@ const borders = {
       down: true
     }
   }
-};
+} as const;
 
 const fills = {
   redDarkVertical: {
-    type: "pattern",
-    pattern: "darkVertical",
+    type: "pattern" as const,
+    pattern: "darkVertical" as const,
     fgColor: { argb: "FFFF0000" }
   },
   redGreenDarkTrellis: {
-    type: "pattern",
-    pattern: "darkTrellis",
+    type: "pattern" as const,
+    pattern: "darkTrellis" as const,
     fgColor: { argb: "FFFF0000" },
     bgColor: { argb: "FF00FF00" }
   },
   blueWhiteHGrad: {
-    type: "gradient",
-    gradient: "angle",
+    type: "gradient" as const,
+    gradient: "angle" as const,
     degree: 0,
     stops: [
       { position: 0, color: { argb: "FF0000FF" } },
@@ -153,8 +152,8 @@ const fills = {
     ]
   },
   rgbPathGrad: {
-    type: "gradient",
-    gradient: "path",
+    type: "gradient" as const,
+    gradient: "path" as const,
     center: { left: 0.5, top: 0.5 },
     stops: [
       { position: 0, color: { argb: "FFFF0000" } },
